@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: careerpilot-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: careerpilot
+      POSTGRES_USER: careerpilot
+      POSTGRES_PASSWORD: careerpilot_dev_password
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - careerpilot_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careerpilot -d careerpilot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: careerpilot-redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - careerpilot_redis_data:/data
+
+    command: redis-server --appendonly yes
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  careerpilot_postgres_data:
+  careerpilot_redis_data:
