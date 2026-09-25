@@ -7,6 +7,12 @@ from backend.app.auth.dependencies import get_current_user
 from backend.app.auth.models import User
 from backend.app.core.database import get_db
 from backend.app.students.schemas import (
+    CareerGoalCreate,
+    CareerGoalResponse,
+    CareerGoalUpdate,
+    CertificationCreate,
+    CertificationResponse,
+    CertificationUpdate,
     EducationCreate,
     EducationResponse,
     EducationUpdate,
@@ -21,6 +27,16 @@ from backend.app.students.schemas import (
     StudentProfileUpdate,
 )
 from backend.app.students.service import (
+    create_career_goal,
+    delete_career_goal,
+    get_user_career_goal,
+    get_user_career_goals,
+    update_career_goal,
+    create_certification,
+    delete_certification,
+    get_user_certification,
+    get_user_certifications,
+    update_certification,
     create_education,
     create_experience,
     create_project,
@@ -488,4 +504,241 @@ def remove_project(
     delete_project(
         db=db,
         project=project,
+    )
+# =========================================================
+# Certifications
+# =========================================================
+
+
+@router.post(
+    "/certifications",
+    response_model=CertificationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_certification(
+    data: CertificationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CertificationResponse:
+    return create_certification(
+        db=db,
+        user_id=current_user.id,
+        data=data,
+    )
+
+
+@router.get(
+    "/certifications",
+    response_model=list[CertificationResponse],
+    status_code=status.HTTP_200_OK,
+)
+def list_certifications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CertificationResponse]:
+    return get_user_certifications(
+        db=db,
+        user_id=current_user.id,
+    )
+
+
+@router.get(
+    "/certifications/{certification_id}",
+    response_model=CertificationResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_certification(
+    certification_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CertificationResponse:
+    certification = get_user_certification(
+        db=db,
+        user_id=current_user.id,
+        certification_id=certification_id,
+    )
+
+    if certification is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certification not found.",
+        )
+
+    return certification
+
+
+@router.patch(
+    "/certifications/{certification_id}",
+    response_model=CertificationResponse,
+    status_code=status.HTTP_200_OK,
+)
+def edit_certification(
+    certification_id: UUID,
+    data: CertificationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CertificationResponse:
+    certification = get_user_certification(
+        db=db,
+        user_id=current_user.id,
+        certification_id=certification_id,
+    )
+
+    if certification is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certification not found.",
+        )
+
+    try:
+        return update_certification(
+            db=db,
+            certification=certification,
+            data=data,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.delete(
+    "/certifications/{certification_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_certification(
+    certification_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    certification = get_user_certification(
+        db=db,
+        user_id=current_user.id,
+        certification_id=certification_id,
+    )
+
+    if certification is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certification not found.",
+        )
+
+    delete_certification(
+        db=db,
+        certification=certification,
+    )
+# =========================================================
+# Career Goals
+# =========================================================
+
+
+@router.post(
+    "/career-goals",
+    response_model=CareerGoalResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_career_goal_endpoint(
+    data: CareerGoalCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return create_career_goal(
+        db=db,
+        user_id=current_user.id,
+        data=data,
+    )
+
+
+@router.get(
+    "/career-goals",
+    response_model=list[CareerGoalResponse],
+)
+def list_career_goals_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_user_career_goals(
+        db=db,
+        user_id=current_user.id,
+    )
+
+
+@router.get(
+    "/career-goals/{career_goal_id}",
+    response_model=CareerGoalResponse,
+)
+def get_career_goal_endpoint(
+    career_goal_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    career_goal = get_user_career_goal(
+        db=db,
+        user_id=current_user.id,
+        career_goal_id=career_goal_id,
+    )
+
+    if career_goal is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Career goal not found.",
+        )
+
+    return career_goal
+
+
+@router.patch(
+    "/career-goals/{career_goal_id}",
+    response_model=CareerGoalResponse,
+)
+def update_career_goal_endpoint(
+    career_goal_id: UUID,
+    data: CareerGoalUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    career_goal = get_user_career_goal(
+        db=db,
+        user_id=current_user.id,
+        career_goal_id=career_goal_id,
+    )
+
+    if career_goal is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Career goal not found.",
+        )
+
+    return update_career_goal(
+        db=db,
+        career_goal=career_goal,
+        data=data,
+    )
+
+
+@router.delete(
+    "/career-goals/{career_goal_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_career_goal_endpoint(
+    career_goal_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    career_goal = get_user_career_goal(
+        db=db,
+        user_id=current_user.id,
+        career_goal_id=career_goal_id,
+    )
+
+    if career_goal is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Career goal not found.",
+        )
+
+    delete_career_goal(
+        db=db,
+        career_goal=career_goal,
     )

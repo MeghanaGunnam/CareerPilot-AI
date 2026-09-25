@@ -7,12 +7,13 @@ from backend.app.core.config import settings
 from backend.app.core.database import Base
 from backend.app.auth.models import User  # noqa: F401
 from backend.app.students.models import (
+    CareerGoal,
     Certification,
     Education,
     Experience,
     Project,
     StudentProfile,
-)  # noqa: F401
+)   # noqa: F401
 
 config = context.config
 

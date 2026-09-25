@@ -314,3 +314,89 @@ class CertificationResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+class CareerGoalCreate(BaseModel):
+    target_role: str = Field(min_length=2, max_length=200)
+    target_industry: str | None = Field(default=None, max_length=200)
+    target_location: str | None = Field(default=None, max_length=200)
+    employment_type: str | None = Field(default=None, max_length=100)
+
+    target_timeline_months: int | None = Field(
+        default=None,
+        ge=1,
+        le=120,
+    )
+
+    priority: int = Field(
+        default=1,
+        ge=1,
+        le=10,
+    )
+
+    is_active: bool = True
+
+    notes: str | None = Field(
+        default=None,
+        max_length=5000,
+    )
+
+
+class CareerGoalUpdate(BaseModel):
+    target_role: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=200,
+    )
+
+    target_industry: str | None = Field(
+        default=None,
+        max_length=200,
+    )
+
+    target_location: str | None = Field(
+        default=None,
+        max_length=200,
+    )
+
+    employment_type: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    target_timeline_months: int | None = Field(
+        default=None,
+        ge=1,
+        le=120,
+    )
+
+    priority: int | None = Field(
+        default=None,
+        ge=1,
+        le=10,
+    )
+
+    is_active: bool | None = None
+
+    notes: str | None = Field(
+        default=None,
+        max_length=5000,
+    )
+
+
+class CareerGoalResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+
+    target_role: str
+    target_industry: str | None
+    target_location: str | None
+    employment_type: str | None
+    target_timeline_months: int | None
+
+    priority: int
+    is_active: bool
+    notes: str | None
+
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

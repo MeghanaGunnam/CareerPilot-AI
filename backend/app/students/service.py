@@ -1,9 +1,10 @@
-import uuid
 
+import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.students.models import (
+    CareerGoal,
     Certification,
     Education,
     Experience,
@@ -11,6 +12,8 @@ from backend.app.students.models import (
     StudentProfile,
 )
 from backend.app.students.schemas import (
+    CareerGoalCreate,
+    CareerGoalUpdate,
     CertificationCreate,
     CertificationUpdate,
     EducationCreate,
@@ -407,4 +410,78 @@ def delete_certification(
     certification: Certification,
 ) -> None:
     db.delete(certification)
+    db.commit()
+# =========================================================
+# Career Goals
+# =========================================================
+
+
+def create_career_goal(
+    db: Session,
+    user_id: uuid.UUID,
+    data: CareerGoalCreate,
+) -> CareerGoal:
+    career_goal = CareerGoal(
+        user_id=user_id,
+        **data.model_dump(),
+    )
+
+    db.add(career_goal)
+    db.commit()
+    db.refresh(career_goal)
+
+    return career_goal
+
+
+def get_user_career_goals(
+    db: Session,
+    user_id: uuid.UUID,
+) -> list[CareerGoal]:
+    statement = (
+        select(CareerGoal)
+        .where(CareerGoal.user_id == user_id)
+        .order_by(
+            CareerGoal.is_active.desc(),
+            CareerGoal.priority.asc(),
+            CareerGoal.created_at.desc(),
+        )
+    )
+
+    return list(db.scalars(statement).all())
+
+
+def get_user_career_goal(
+    db: Session,
+    user_id: uuid.UUID,
+    career_goal_id: uuid.UUID,
+) -> CareerGoal | None:
+    statement = select(CareerGoal).where(
+        CareerGoal.id == career_goal_id,
+        CareerGoal.user_id == user_id,
+    )
+
+    return db.scalar(statement)
+
+
+def update_career_goal(
+    db: Session,
+    career_goal: CareerGoal,
+    data: CareerGoalUpdate,
+) -> CareerGoal:
+    update_data = data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(career_goal, field, value)
+
+    db.commit()
+    db.refresh(career_goal)
+
+    return career_goal
+
+
+def delete_career_goal(
+    db: Session,
+    career_goal: CareerGoal,
+) -> None:
+    db.delete(career_goal)
     db.commit()
