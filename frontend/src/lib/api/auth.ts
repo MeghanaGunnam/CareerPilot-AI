@@ -63,3 +63,13 @@ export async function logout(
     },
   });
 }
+export async function verifyEmail(
+  token: string
+): Promise<void> {
+  return apiRequest<void>("/auth/verify-email", {
+    method: "POST",
+    body: {
+      token,
+    },
+  });
+}
