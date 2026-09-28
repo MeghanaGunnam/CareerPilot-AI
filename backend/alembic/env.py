@@ -5,7 +5,11 @@ from sqlalchemy import engine_from_config, pool
 
 from backend.app.core.config import settings
 from backend.app.core.database import Base
+
+# Import every SQLAlchemy model before target_metadata is used.
+# This allows Alembic to discover the tables during autogeneration.
 from backend.app.auth.models import User  # noqa: F401
+
 from backend.app.students.models import (
     CareerGoal,
     Certification,
@@ -13,32 +17,49 @@ from backend.app.students.models import (
     Experience,
     Project,
     StudentProfile,
-)   # noqa: F401
+)  # noqa: F401
+
+from backend.app.careers.models import (
+    Career,
+    CareerRiasecProfile,
+)  # noqa: F401
+from backend.app.psychometrics.models import (
+    RiasecAnswer,
+    RiasecAssessment,
+    RiasecProfile,
+)  # noqa: F401
 
 config = context.config
 
-# Use CareerPilot's environment configuration instead of
-# hard-coding database credentials in alembic.ini.
-config.set_main_option("sqlalchemy.url", settings.database_url)
-
+# Use the database URL from backend/.env.
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.database_url,
+)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 
-# All SQLAlchemy models will inherit from this Base.
-# Alembic uses its metadata for autogeneration.
+# Alembic reads all registered SQLAlchemy tables
+# from this metadata object.
 target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
+    """Run migrations without creating a DB connection."""
+
+    url = config.get_main_option(
+        "sqlalchemy.url"
+    )
 
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
+        dialect_opts={
+            "paramstyle": "named"
+        },
         compare_type=True,
     )
 
@@ -47,8 +68,13 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    """Run migrations using a database connection."""
+
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        config.get_section(
+            config.config_ini_section,
+            {},
+        ),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

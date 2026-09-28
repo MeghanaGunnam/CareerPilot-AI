@@ -4,7 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.auth.router import router as auth_router
 from backend.app.core.config import settings
 from backend.app.students.router import router as students_router
-
+from backend.app.careers.router import router as careers_router
+from backend.app.psychometrics.router import router as psychometrics_router
 
 app = FastAPI(
     title="CareerPilot AI API",
@@ -29,6 +30,8 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(students_router)
+app.include_router(careers_router)
+app.include_router(psychometrics_router)
 
 
 @app.get(
