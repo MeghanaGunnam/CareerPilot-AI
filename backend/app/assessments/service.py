@@ -14,7 +14,9 @@ from backend.app.assessments.models import (
 from backend.app.assessments.schemas import AssessmentSubmitRequest
 from backend.app.skills.models import Skill, SkillEvidence, StudentSkill
 from backend.app.skills.service import get_or_create_student_skill
-
+from backend.app.career_twin.service import (
+    create_career_twin_snapshot,
+)
 
 def get_active_assessments(db: Session) -> list[Assessment]:
     statement = (
@@ -192,7 +194,6 @@ def submit_assessment(
     )
 
     db.add(evidence)
-
     try:
         db.commit()
     except Exception:
@@ -201,4 +202,11 @@ def submit_assessment(
 
     db.refresh(attempt)
 
+    create_career_twin_snapshot(
+        db=db,
+        user_id=user_id,
+        trigger_type="ASSESSMENT_COMPLETED",
+        source_type="ASSESSMENT",
+        source_reference=str(attempt.id),
+)
     return attempt

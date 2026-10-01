@@ -22,7 +22,9 @@ from backend.app.students.models import (
 from backend.app.careers.models import (
     Career,
     CareerRiasecProfile,
-)  # noqa: F401
+    CareerSkillRequirement,
+    CareerSoftwareRequirement,
+)  # noqa: F401  # noqa: F401
 from backend.app.psychometrics.models import (
     RiasecAnswer,
     RiasecAssessment,

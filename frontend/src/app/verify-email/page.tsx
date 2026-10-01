@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { verifyEmail } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
@@ -12,7 +17,34 @@ type VerificationStatus =
   | "success"
   | "error";
 
-export default function VerifyEmailPage() {
+function VerificationLoading() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <Link
+          href="/"
+          className="text-xl font-bold text-slate-950"
+        >
+          CareerPilot AI
+        </Link>
+
+        <div className="mt-8">
+          <div className="mb-5 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+
+          <h1 className="text-2xl font-semibold text-slate-950">
+            Loading verification
+          </h1>
+
+          <p className="mt-3 leading-7 text-slate-600">
+            Preparing your email verification...
+          </p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
 
@@ -32,11 +64,14 @@ export default function VerifyEmailPage() {
 
     hasStarted.current = true;
 
+    const verificationToken = token;
+
     async function verify() {
       try {
-        await verifyEmail(token);
+        await verifyEmail(verificationToken);
 
         setStatus("success");
+
         setMessage(
           "Your email address has been verified successfully."
         );
@@ -53,7 +88,7 @@ export default function VerifyEmailPage() {
       }
     }
 
-    verify();
+    void verify();
   }, [token]);
 
   const effectiveStatus: VerificationStatus =
@@ -132,5 +167,13 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<VerificationLoading />}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

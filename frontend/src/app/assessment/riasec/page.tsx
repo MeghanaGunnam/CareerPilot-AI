@@ -148,6 +148,22 @@ export default function RiasecAssessmentPage() {
   }
 
   async function submitAssessment() {
+    /*
+     * questionnaire is nullable React state.
+     *
+     * Although the component already returns above when
+     * questionnaire is null, TypeScript does not preserve
+     * that narrowing inside this callback.
+     *
+     * This guard makes the function safe and fixes TS18047.
+     */
+    if (!questionnaire) {
+      setError(
+        "The assessment questions are not available. Please refresh and try again."
+      );
+      return;
+    }
+
     if (selectedValue === undefined) {
       setError(
         "Please select an answer before submitting."

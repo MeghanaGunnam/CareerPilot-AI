@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class EvidenceDetailResponse(BaseModel):
@@ -36,3 +36,15 @@ class AcifSkillStateResponse(BaseModel):
     snapshot_version: int
     model_version: str
     skills: list[SkillStateResponse]
+
+
+class SkillEvidenceSimulationRequest(BaseModel):
+    simulation_type: str = "ADD_SKILL_EVIDENCE"
+    skill_name: str = Field(
+        min_length=1,
+        max_length=200,
+    )
+    simulated_confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
