@@ -28,7 +28,26 @@ from backend.app.psychometrics.models import (
     RiasecAssessment,
     RiasecProfile,
 )  # noqa: F401
-
+from backend.app.resumes.models import (
+    Resume,
+    ResumeVersion,
+)  # noqa: F401
+from backend.app.skills.models import (
+    Skill,
+    StudentSkill,
+    SkillEvidence,
+)  # noqa: F401
+from backend.app.assessments.models import (
+    Assessment,
+    AssessmentQuestion,
+    AssessmentAttempt,
+    AssessmentAnswer,
+)  # noqa: F401
+from backend.app.career_twin.models import (
+    CareerTwin,
+    CareerTwinEvent,
+    CareerTwinSnapshot,
+)  # noqa: F401
 config = context.config
 
 # Use the database URL from backend/.env.

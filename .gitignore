@@ -42,3 +42,5 @@ coverage/
 htmlcov/
 dist/
 build/
+# Private uploaded files
+storage/
