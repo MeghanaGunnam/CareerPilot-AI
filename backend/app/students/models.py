@@ -355,6 +355,12 @@ class CareerGoal(Base):
         nullable=False,
     )
 
+    onet_soc_code: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        index=True,
+    )
+
     target_industry: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
@@ -385,7 +391,11 @@ class CareerGoal(Base):
         default=True,
         server_default="true",
     )
-
+    is_primary: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
     notes: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,

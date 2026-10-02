@@ -36,6 +36,7 @@ from backend.app.resumes.models import (
 )  # noqa: F401
 from backend.app.skills.models import (
     Skill,
+    SkillCompetencyMapping,
     StudentSkill,
     SkillEvidence,
 )  # noqa: F401

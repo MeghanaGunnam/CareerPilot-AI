@@ -56,6 +56,39 @@ export interface AssessmentSubmissionResponse {
   answers: AssessmentResultAnswer[];
 }
 
+export interface AssessmentRecommendationCompetency {
+  element_id: string;
+  element_name: string;
+  skill_type: string;
+  importance: number | null;
+  level: number | null;
+  mapping_type: string;
+  mapping_version: string;
+  rationale: string | null;
+}
+
+export interface AssessmentRecommendation {
+  assessment_id: string;
+  skill_id: string;
+  skill_name: string;
+  title: string;
+  description: string;
+  difficulty: string;
+  version: number;
+  competency: AssessmentRecommendationCompetency;
+  recommendation_status: string;
+  reason: string;
+}
+
+export interface CareerAssessmentRecommendationsResponse {
+  career_id: string;
+  career_title: string;
+  onet_soc_code: string;
+  recommended_count: number;
+  recommendations: AssessmentRecommendation[];
+  interpretation: string;
+}
+
 export async function getAssessments(
   accessToken: string
 ): Promise<AssessmentSummary[]> {
@@ -89,6 +122,19 @@ export async function submitAssessment(
       method: "POST",
       accessToken,
       body: payload,
+    }
+  );
+}
+
+export async function getCareerAssessmentRecommendations(
+  accessToken: string,
+  careerId: string
+): Promise<CareerAssessmentRecommendationsResponse> {
+  return apiRequest<CareerAssessmentRecommendationsResponse>(
+    `/assessments/recommendations/careers/${careerId}`,
+    {
+      method: "GET",
+      accessToken,
     }
   );
 }

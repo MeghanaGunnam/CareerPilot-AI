@@ -1,4 +1,12 @@
+from __future__ import annotations
+
 from typing import Any
+
+from sqlalchemy.orm import Session
+
+from backend.app.acif.competency_matching import (
+    build_competency_measurements,
+)
 
 
 STRONG_EVIDENCE_THRESHOLD = 0.70
@@ -72,7 +80,9 @@ def build_technology_gap_analysis(
 
 
 def build_competency_requirement_profile(
+    db: Session,
     competency_rows: list[dict[str, Any]],
+    skill_states: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     grouped: dict[
         tuple[str, str],
@@ -87,22 +97,29 @@ def build_competency_requirement_profile(
             continue
 
         skill_type = row["skill_type"]
+        element_id = row["element_id"]
         element_name = row["element_name"]
 
+        # O*NET element_id is the stable competency identity.
+        # skill_type is retained so different O*NET
+        # requirement families remain distinct if needed.
         key = (
             skill_type,
-            element_name,
+            element_id,
         )
 
         if key not in grouped:
             grouped[key] = {
                 "skill_type": skill_type,
-                "element_id": row["element_id"],
+                "element_id": element_id,
                 "element_name": element_name,
                 "importance": None,
                 "level": None,
-                "student_measurement_status": "NOT_ASSESSED",
+                "student_measurement_status": (
+                    "NOT_ASSESSED"
+                ),
                 "gap_status": "UNKNOWN",
+                "measurement": None,
             }
 
         scale_id = row["scale_id"]
@@ -113,6 +130,38 @@ def build_competency_requirement_profile(
 
         elif scale_id == "LV":
             grouped[key]["level"] = value
+
+    competencies = [
+        {
+            "element_id": item["element_id"],
+            "element_name": item["element_name"],
+        }
+        for item in grouped.values()
+    ]
+
+    measurements = build_competency_measurements(
+        db=db,
+        competencies=competencies,
+        skill_states=skill_states,
+    )
+
+    for item in grouped.values():
+        measurement = measurements.get(
+            item["element_id"]
+        )
+
+        if measurement is None:
+            continue
+
+        item["student_measurement_status"] = (
+            "MEASURED"
+        )
+
+        item["gap_status"] = (
+            "MEASUREMENT_AVAILABLE"
+        )
+
+        item["measurement"] = measurement
 
     requirements = list(grouped.values())
 
@@ -129,8 +178,10 @@ def build_competency_requirement_profile(
 
 
 def build_gap_analysis(
+    db: Session,
     software_alignment: dict[str, Any],
     competency_rows: list[dict[str, Any]],
+    skill_states: list[dict[str, Any]],
 ) -> dict[str, Any]:
     technology_analysis = (
         build_technology_gap_analysis(
@@ -140,7 +191,9 @@ def build_gap_analysis(
 
     competency_profile = (
         build_competency_requirement_profile(
-            competency_rows
+            db=db,
+            competency_rows=competency_rows,
+            skill_states=skill_states,
         )
     )
 
@@ -163,6 +216,15 @@ def build_gap_analysis(
                 "The career requires or values this "
                 "competency, but CareerPilot has not yet "
                 "measured the student's competency level."
+            ),
+            "measured": (
+                "CareerPilot found assessment-derived "
+                "measurement evidence relevant to this "
+                "occupational competency through an active "
+                "CareerPilot skill-to-O*NET mapping. The "
+                "mapped skill contributes evidence but does "
+                "not represent complete measurement of the "
+                "broader competency."
             ),
         },
     }

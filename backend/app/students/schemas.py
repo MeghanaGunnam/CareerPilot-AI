@@ -316,6 +316,11 @@ class CertificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 class CareerGoalCreate(BaseModel):
     target_role: str = Field(min_length=2, max_length=200)
+    onet_soc_code: str | None = Field(
+        default=None,
+        min_length=7,
+        max_length=20,
+    )
     target_industry: str | None = Field(default=None, max_length=200)
     target_location: str | None = Field(default=None, max_length=200)
     employment_type: str | None = Field(default=None, max_length=100)
@@ -333,7 +338,7 @@ class CareerGoalCreate(BaseModel):
     )
 
     is_active: bool = True
-
+    is_primary: bool = False
     notes: str | None = Field(
         default=None,
         max_length=5000,
@@ -346,7 +351,11 @@ class CareerGoalUpdate(BaseModel):
         min_length=2,
         max_length=200,
     )
-
+    onet_soc_code: str | None = Field(
+        default=None,
+        min_length=7,
+        max_length=20,
+    )
     target_industry: str | None = Field(
         default=None,
         max_length=200,
@@ -375,7 +384,7 @@ class CareerGoalUpdate(BaseModel):
     )
 
     is_active: bool | None = None
-
+    is_primary: bool | None = None
     notes: str | None = Field(
         default=None,
         max_length=5000,
@@ -387,6 +396,7 @@ class CareerGoalResponse(BaseModel):
     user_id: UUID
 
     target_role: str
+    onet_soc_code: str | None
     target_industry: str | None
     target_location: str | None
     employment_type: str | None
@@ -394,6 +404,7 @@ class CareerGoalResponse(BaseModel):
 
     priority: int
     is_active: bool
+    is_primary: bool
     notes: str | None
 
     created_at: datetime

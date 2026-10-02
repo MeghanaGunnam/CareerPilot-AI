@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -206,3 +207,73 @@ class SkillEvidence(Base):
     )
 
     student_skill: Mapped["StudentSkill"] = relationship()
+class SkillCompetencyMapping(Base):
+    __tablename__ = "skill_competency_mappings"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "skill_id",
+            "onet_element_id",
+            name="uq_skill_competency_mapping",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    skill_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "skills.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    onet_element_id: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+    )
+
+    onet_element_name: Mapped[str] = mapped_column(
+        String(200),
+        nullable=False,
+        index=True,
+    )
+
+    mapping_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="CONTRIBUTES_TO",
+    )
+
+    mapping_version: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="acif-competency-map-v1",
+    )
+
+    rationale: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+
+    skill: Mapped["Skill"] = relationship()

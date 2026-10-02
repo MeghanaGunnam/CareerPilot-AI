@@ -24,36 +24,32 @@ export interface ResumeUploadResponse {
   version: ResumeVersion;
 }
 
-export interface UploadResumeOptions {
-  file: File;
-  title?: string;
-  resumeId?: string;
-}
-
 export async function uploadResume(
   accessToken: string,
-  options: UploadResumeOptions
+  file: File,
+  title: string,
+  resumeId?: string,
 ): Promise<ResumeUploadResponse> {
   const formData = new FormData();
 
-  formData.append("file", options.file);
+  formData.append("file", file);
+  formData.append("title", title);
 
-  if (options.title?.trim()) {
-    formData.append("title", options.title.trim());
+  if (resumeId) {
+    formData.append("resume_id", resumeId);
   }
 
-  if (options.resumeId?.trim()) {
-    formData.append("resume_id", options.resumeId.trim());
-  }
-
-  const response = await fetch(`${API_BASE_URL}/resumes/upload`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${accessToken}`,
+  const response = await fetch(
+    `${API_BASE_URL}/resumes/upload`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
     },
-    body: formData,
-  });
+  );
 
   const contentType = response.headers.get("content-type");
 

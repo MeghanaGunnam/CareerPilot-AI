@@ -55,6 +55,7 @@ from backend.app.students.service import (
     update_experience,
     update_project,
     update_student_profile,
+    get_user_primary_career_goal,
 )
 
 
@@ -643,11 +644,17 @@ def create_career_goal_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return create_career_goal(
-        db=db,
-        user_id=current_user.id,
-        data=data,
-    )
+    try:
+        return create_career_goal(
+            db=db,
+            user_id=current_user.id,
+            data=data,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(
@@ -662,7 +669,26 @@ def list_career_goals_endpoint(
         db=db,
         user_id=current_user.id,
     )
+@router.get(
+    "/career-goals/primary",
+    response_model=CareerGoalResponse,
+)
+def get_primary_career_goal_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    career_goal = get_user_primary_career_goal(
+        db=db,
+        user_id=current_user.id,
+    )
 
+    if career_goal is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Primary career goal not found.",
+        )
+
+    return career_goal
 
 @router.get(
     "/career-goals/{career_goal_id}",
@@ -710,11 +736,17 @@ def update_career_goal_endpoint(
             detail="Career goal not found.",
         )
 
-    return update_career_goal(
-        db=db,
-        career_goal=career_goal,
-        data=data,
-    )
+    try:
+        return update_career_goal(
+            db=db,
+            career_goal=career_goal,
+            data=data,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @router.delete(

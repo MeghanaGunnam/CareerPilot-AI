@@ -5,14 +5,25 @@ import { useRouter } from "next/navigation";
 
 import {
   AssessmentDetail,
+  AssessmentRecommendation,
   AssessmentSubmissionResponse,
   AssessmentSummary,
+  CareerAssessmentRecommendationsResponse,
   getAssessment,
   getAssessments,
+  getCareerAssessmentRecommendations,
   submitAssessment,
 } from "@/lib/api/assessments";
+import {
+  getPrimaryCareerGoal,
+} from "@/lib/api/students";
 
+import {
+  resolveCareerByOnetCode,
+} from "@/lib/api/careers";
 const ACCESS_TOKEN_KEY = "careerpilot_access_token";
+
+
 
 type Answers = Record<string, string>;
 
@@ -27,48 +38,81 @@ export default function AssessmentPage() {
   const router = useRouter();
 
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
+  const [recommendations, setRecommendations] =
+  useState<CareerAssessmentRecommendationsResponse | null>(null);
+
+  
+
+  const [resolvedCareerId, setResolvedCareerId] =
+  useState<string | null>(null);
+
   const [activeAssessment, setActiveAssessment] =
     useState<AssessmentDetail | null>(null);
 
   const [answers, setAnswers] = useState<Answers>({});
+
   const [result, setResult] =
     useState<AssessmentSubmissionResponse | null>(null);
 
   const [loading, setLoading] = useState(true);
-  const [opening, setOpening] = useState(false);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const [error, setError] = useState("");
 
   useEffect(() => {
-    async function loadAssessments() {
-      const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+  async function loadPage() {
+    const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
 
-      if (!accessToken) {
-        router.replace("/login");
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError("");
-
-        const response = await getAssessments(accessToken);
-        setAssessments(response);
-      } catch (loadError) {
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Assessments could not be loaded."
-        );
-      } finally {
-        setLoading(false);
-      }
+    if (!accessToken) {
+      router.replace("/login");
+      return;
     }
 
-    void loadAssessments();
-  }, [router]);
+    try {
+      setLoading(true);
+      setError("");
 
+      const [assessmentResponse, primaryGoal] = await Promise.all([
+        getAssessments(accessToken),
+        getPrimaryCareerGoal(accessToken),
+      ]);
+
+      if (!primaryGoal.onet_soc_code) {
+        throw new Error(
+          "Your primary career goal does not have an O*NET occupation mapping."
+        );
+      }
+
+      const targetCareer = await resolveCareerByOnetCode(
+        primaryGoal.target_role,
+        primaryGoal.onet_soc_code
+      );
+
+      const careerId = targetCareer.id;
+
+      const recommendationResponse =
+        await getCareerAssessmentRecommendations(
+          accessToken,
+          careerId
+        );
+
+      setAssessments(assessmentResponse);
+      setResolvedCareerId(careerId);
+      setRecommendations(recommendationResponse);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Assessments could not be loaded."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  void loadPage();
+}, [router]);
   async function handleOpenAssessment(assessmentId: string) {
     const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
 
@@ -78,7 +122,7 @@ export default function AssessmentPage() {
     }
 
     try {
-      setOpening(true);
+      setOpeningId(assessmentId);
       setError("");
       setResult(null);
       setAnswers({});
@@ -96,7 +140,7 @@ export default function AssessmentPage() {
           : "Assessment could not be opened."
       );
     } finally {
-      setOpening(false);
+      setOpeningId(null);
     }
   }
 
@@ -151,6 +195,21 @@ export default function AssessmentPage() {
 
       setResult(response);
 
+      try {
+  if (resolvedCareerId) {
+    const updatedRecommendations =
+      await getCareerAssessmentRecommendations(
+        accessToken,
+        resolvedCareerId
+      );
+
+    setRecommendations(updatedRecommendations);
+  }
+} catch {
+  // The assessment result remains valid even if refreshing
+  // recommendations temporarily fails.
+}
+
       window.scrollTo({
         top: 0,
         behavior: "smooth",
@@ -171,6 +230,97 @@ export default function AssessmentPage() {
     setResult(null);
     setAnswers({});
     setError("");
+  }
+
+  function renderRecommendationCard(
+    recommendation: AssessmentRecommendation
+  ) {
+    return (
+      <article
+        key={recommendation.assessment_id}
+        className="rounded-2xl border border-blue-200 bg-white p-6 shadow-sm"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
+              Recommended
+            </span>
+
+            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+              {recommendation.skill_name}
+            </span>
+          </div>
+
+          <span className="text-xs font-medium text-slate-500">
+            Version {recommendation.version}
+          </span>
+        </div>
+
+        <h3 className="mt-5 text-xl font-bold text-slate-950">
+          {recommendation.title}
+        </h3>
+
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          {recommendation.description}
+        </p>
+
+        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            O*NET competency
+          </p>
+
+          <p className="mt-2 font-semibold text-slate-950">
+            {recommendation.competency.element_name}
+          </p>
+
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-600">
+            <span>
+              {recommendation.competency.skill_type}
+            </span>
+
+            {recommendation.competency.importance !== null && (
+              <span>
+                Importance{" "}
+                {recommendation.competency.importance.toFixed(2)}
+              </span>
+            )}
+
+            {recommendation.competency.level !== null && (
+              <span>
+                Level {recommendation.competency.level.toFixed(2)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl bg-blue-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">
+            Why ACIF recommends this
+          </p>
+
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            {recommendation.reason}
+          </p>
+        </div>
+
+        <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          {formatDifficulty(recommendation.difficulty)}
+        </p>
+
+        <button
+          type="button"
+          disabled={openingId !== null}
+          onClick={() =>
+            handleOpenAssessment(recommendation.assessment_id)
+          }
+          className="mt-6 w-full rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {openingId === recommendation.assessment_id
+            ? "Opening..."
+            : "Start Recommended Assessment"}
+        </button>
+      </article>
+    );
   }
 
   if (loading) {
@@ -566,62 +716,144 @@ export default function AssessmentPage() {
           </div>
         )}
 
-        {assessments.length === 0 ? (
-          <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-            <h2 className="font-semibold text-slate-900">
-              No assessments available
-            </h2>
+        {recommendations && (
+          <section className="mt-10">
+            <div className="rounded-3xl bg-slate-950 p-7 text-white">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-wider text-blue-300">
+                    ACIF Recommendations
+                  </p>
 
-            <p className="mt-2 text-sm text-slate-500">
-              New technical assessments will appear here when
-              available.
-            </p>
-          </div>
-        ) : (
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
-            {assessments.map((assessment) => (
-              <article
-                key={assessment.id}
-                className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                    {assessment.skill_name}
-                  </span>
+                  <h2 className="mt-2 text-2xl font-bold">
+                    Recommended for your target career
+                  </h2>
 
-                  <span className="text-xs font-medium text-slate-500">
-                    Version {assessment.version}
-                  </span>
+                  <p className="mt-2 text-sm text-slate-300">
+                    O*NET anchor: {recommendations.career_title} ·{" "}
+                    {recommendations.onet_soc_code}
+                  </p>
                 </div>
 
-                <h2 className="mt-5 text-xl font-bold text-slate-950">
-                  {assessment.title}
-                </h2>
+                <div className="rounded-2xl bg-white/10 px-5 py-3 text-center">
+                  <p className="text-2xl font-bold">
+                    {recommendations.recommended_count}
+                  </p>
 
-                <p className="mt-3 text-sm leading-6 text-slate-600">
-                  {assessment.description}
+                  <p className="text-xs text-slate-300">
+                    Recommended
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-5 max-w-4xl text-sm leading-6 text-slate-300">
+                ACIF compares occupational competencies with
+                assessment-derived measurements in your current
+                Career Twin. Recommendations appear when a mapped
+                competency still needs measurement.
+              </p>
+            </div>
+
+            {recommendations.recommendations.length > 0 ? (
+              <div className="mt-5 grid gap-5 md:grid-cols-2">
+                {recommendations.recommendations.map(
+                  renderRecommendationCard
+                )}
+              </div>
+            ) : (
+              <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+                <h3 className="font-semibold text-emerald-900">
+                  No mapped assessments currently recommended
+                </h3>
+
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-800">
+                  Your current Career Twin already contains
+                  assessment-derived measurements for the active
+                  assessments that are mapped to competencies for
+                  this occupational anchor. More recommendations
+                  can appear as CareerPilot adds additional mapped
+                  assessments.
                 </p>
-
-                <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  {formatDifficulty(assessment.difficulty)}
-                </p>
-
-                <button
-                  type="button"
-                  disabled={opening}
-                  onClick={() =>
-                    handleOpenAssessment(assessment.id)
-                  }
-                  className="mt-6 w-full rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
-                >
-                  {opening
-                    ? "Opening..."
-                    : "Start Assessment"}
-                </button>
-              </article>
-            ))}
-          </div>
+              </div>
+            )}
+          </section>
         )}
+
+        <section className="mt-12">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+              Assessment Catalog
+            </p>
+
+            <h2 className="mt-2 text-2xl font-bold text-slate-950">
+              All Assessments
+            </h2>
+
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Browse all active CareerPilot assessments. An
+              assessment can remain available here even when ACIF
+              no longer recommends it for your current competency
+              gaps.
+            </p>
+          </div>
+
+          {assessments.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+              <h3 className="font-semibold text-slate-900">
+                No assessments available
+              </h3>
+
+              <p className="mt-2 text-sm text-slate-500">
+                New technical assessments will appear here when
+                available.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-5 md:grid-cols-2">
+              {assessments.map((assessment) => (
+                <article
+                  key={assessment.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                      {assessment.skill_name}
+                    </span>
+
+                    <span className="text-xs font-medium text-slate-500">
+                      Version {assessment.version}
+                    </span>
+                  </div>
+
+                  <h3 className="mt-5 text-xl font-bold text-slate-950">
+                    {assessment.title}
+                  </h3>
+
+                  <p className="mt-3 text-sm leading-6 text-slate-600">
+                    {assessment.description}
+                  </p>
+
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    {formatDifficulty(assessment.difficulty)}
+                  </p>
+
+                  <button
+                    type="button"
+                    disabled={openingId !== null}
+                    onClick={() =>
+                      handleOpenAssessment(assessment.id)
+                    }
+                    className="mt-6 w-full rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {openingId === assessment.id
+                      ? "Opening..."
+                      : "Start Assessment"}
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );

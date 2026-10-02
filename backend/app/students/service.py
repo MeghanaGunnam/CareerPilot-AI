@@ -2,7 +2,8 @@
 import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
+from backend.app.careers.models import Career
+from backend.app.career_twin.service import create_career_twin_snapshot
 from backend.app.students.models import (
     CareerGoal,
     Certification,
@@ -411,9 +412,67 @@ def delete_certification(
 ) -> None:
     db.delete(certification)
     db.commit()
+def validate_onet_career(
+    db: Session,
+    onet_soc_code: str | None,
+) -> Career | None:
+    if onet_soc_code is None:
+        return None
+
+    normalized_code = onet_soc_code.strip()
+
+    if not normalized_code:
+        raise ValueError("O*NET SOC code cannot be empty.")
+
+    statement = select(Career).where(
+        Career.onet_soc_code == normalized_code
+    )
+
+    career = db.scalar(statement)
+
+    if career is None:
+        raise ValueError(
+            f"O*NET occupation '{normalized_code}' was not found."
+        )
+
+    return career
 # =========================================================
 # Career Goals
 # =========================================================
+
+
+def _unset_other_primary_career_goals(
+    db: Session,
+    user_id: uuid.UUID,
+    exclude_goal_id: uuid.UUID | None = None,
+) -> None:
+    statement = select(CareerGoal).where(
+        CareerGoal.user_id == user_id,
+        CareerGoal.is_primary.is_(True),
+    )
+
+    if exclude_goal_id is not None:
+        statement = statement.where(
+            CareerGoal.id != exclude_goal_id
+        )
+
+    primary_goals = list(db.scalars(statement).all())
+
+    for goal in primary_goals:
+        goal.is_primary = False
+
+
+def _create_career_goal_snapshot(
+    db: Session,
+    career_goal: CareerGoal,
+) -> None:
+    create_career_twin_snapshot(
+        db=db,
+        user_id=career_goal.user_id,
+        trigger_type="CAREER_GOAL_UPDATED",
+        source_type="CAREER_GOAL",
+        source_reference=str(career_goal.id),
+    )
 
 
 def create_career_goal(
@@ -421,14 +480,48 @@ def create_career_goal(
     user_id: uuid.UUID,
     data: CareerGoalCreate,
 ) -> CareerGoal:
+    create_data = data.model_dump()
+
+    onet_soc_code = create_data.get("onet_soc_code")
+
+    if onet_soc_code is not None:
+        onet_soc_code = onet_soc_code.strip()
+
+        validate_onet_career(
+            db=db,
+            onet_soc_code=onet_soc_code,
+        )
+
+        create_data["onet_soc_code"] = onet_soc_code
+
+    is_primary = create_data.get("is_primary", False)
+    is_active = create_data.get("is_active", True)
+
+    if is_primary and not is_active:
+        raise ValueError(
+            "A primary career goal must be active."
+        )
+
+    if is_primary:
+        _unset_other_primary_career_goals(
+            db=db,
+            user_id=user_id,
+        )
+
     career_goal = CareerGoal(
         user_id=user_id,
-        **data.model_dump(),
+        **create_data,
     )
 
     db.add(career_goal)
     db.commit()
     db.refresh(career_goal)
+
+    if career_goal.is_primary and career_goal.is_active:
+        _create_career_goal_snapshot(
+            db=db,
+            career_goal=career_goal,
+        )
 
     return career_goal
 
@@ -441,6 +534,7 @@ def get_user_career_goals(
         select(CareerGoal)
         .where(CareerGoal.user_id == user_id)
         .order_by(
+            CareerGoal.is_primary.desc(),
             CareerGoal.is_active.desc(),
             CareerGoal.priority.asc(),
             CareerGoal.created_at.desc(),
@@ -448,6 +542,27 @@ def get_user_career_goals(
     )
 
     return list(db.scalars(statement).all())
+
+
+def get_user_primary_career_goal(
+    db: Session,
+    user_id: uuid.UUID,
+) -> CareerGoal | None:
+    statement = (
+        select(CareerGoal)
+        .where(
+            CareerGoal.user_id == user_id,
+            CareerGoal.is_primary.is_(True),
+            CareerGoal.is_active.is_(True),
+        )
+        .order_by(
+            CareerGoal.updated_at.desc(),
+            CareerGoal.created_at.desc(),
+        )
+        .limit(1)
+    )
+
+    return db.scalar(statement)
 
 
 def get_user_career_goal(
@@ -470,11 +585,89 @@ def update_career_goal(
 ) -> CareerGoal:
     update_data = data.model_dump(exclude_unset=True)
 
+    if "onet_soc_code" in update_data:
+        onet_soc_code = update_data["onet_soc_code"]
+
+        if onet_soc_code is not None:
+            onet_soc_code = onet_soc_code.strip()
+
+            validate_onet_career(
+                db=db,
+                onet_soc_code=onet_soc_code,
+            )
+
+            update_data["onet_soc_code"] = onet_soc_code
+
+    was_primary = (
+        career_goal.is_primary
+        and career_goal.is_active
+    )
+
+    old_target_state = (
+        career_goal.target_role,
+        career_goal.onet_soc_code,
+        career_goal.target_industry,
+        career_goal.target_location,
+        career_goal.employment_type,
+        career_goal.target_timeline_months,
+        career_goal.is_active,
+        career_goal.is_primary,
+    )
+
+    resulting_is_primary = update_data.get(
+        "is_primary",
+        career_goal.is_primary,
+    )
+
+    resulting_is_active = update_data.get(
+        "is_active",
+        career_goal.is_active,
+    )
+
+    if resulting_is_primary and not resulting_is_active:
+        raise ValueError(
+            "A primary career goal must be active."
+        )
+
+    if resulting_is_primary:
+        _unset_other_primary_career_goals(
+            db=db,
+            user_id=career_goal.user_id,
+            exclude_goal_id=career_goal.id,
+        )
+
     for field, value in update_data.items():
         setattr(career_goal, field, value)
 
     db.commit()
     db.refresh(career_goal)
+
+    is_primary_now = (
+        career_goal.is_primary
+        and career_goal.is_active
+    )
+
+    new_target_state = (
+        career_goal.target_role,
+        career_goal.onet_soc_code,
+        career_goal.target_industry,
+        career_goal.target_location,
+        career_goal.employment_type,
+        career_goal.target_timeline_months,
+        career_goal.is_active,
+        career_goal.is_primary,
+    )
+
+    primary_target_changed = (
+        old_target_state != new_target_state
+        and (was_primary or is_primary_now)
+    )
+
+    if primary_target_changed:
+        _create_career_goal_snapshot(
+            db=db,
+            career_goal=career_goal,
+        )
 
     return career_goal
 
@@ -483,5 +676,22 @@ def delete_career_goal(
     db: Session,
     career_goal: CareerGoal,
 ) -> None:
+    user_id = career_goal.user_id
+    goal_id = career_goal.id
+
+    was_primary = (
+        career_goal.is_primary
+        and career_goal.is_active
+    )
+
     db.delete(career_goal)
     db.commit()
+
+    if was_primary:
+        create_career_twin_snapshot(
+            db=db,
+            user_id=user_id,
+            trigger_type="CAREER_GOAL_UPDATED",
+            source_type="CAREER_GOAL",
+            source_reference=str(goal_id),
+        )

@@ -64,3 +64,44 @@ class AssessmentAttemptResultResponse(BaseModel):
     percentage: float
     completed_at: datetime
     answers: list[AssessmentAnswerResult]
+class AssessmentCompetencyResponse(BaseModel):
+    element_id: str
+    element_name: str
+    skill_type: str
+    importance: float | None
+    level: float | None
+    mapping_type: str
+    mapping_version: str
+    mapping_rationale: str | None
+
+
+class AssessmentRecommendationResponse(BaseModel):
+    assessment_id: uuid.UUID
+    skill_id: uuid.UUID
+    skill_name: str
+    title: str
+    description: str | None
+    difficulty: str
+    version: int
+
+    career_id: uuid.UUID
+    career_title: str
+    onet_soc_code: str | None
+
+    competency: AssessmentCompetencyResponse
+
+    recommendation_status: str
+    reason: str
+
+
+class CareerAssessmentRecommendationsResponse(BaseModel):
+    career_id: uuid.UUID
+    career_title: str
+    onet_soc_code: str | None
+
+    recommended_count: int
+    recommendations: list[
+        AssessmentRecommendationResponse
+    ]
+
+    interpretation: str

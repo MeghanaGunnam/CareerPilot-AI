@@ -270,10 +270,11 @@ export default function EvidencePage() {
       setUploadError("");
       setUploadResult(null);
 
-      const result = await uploadResume(accessToken, {
-        file: selectedFile,
-        title: resumeTitle || undefined,
-      });
+      const result = await uploadResume(
+  accessToken,
+  selectedFile,
+  resumeTitle || "My Resume"
+);
 
       setUploadResult(result);
       setSelectedFile(null);

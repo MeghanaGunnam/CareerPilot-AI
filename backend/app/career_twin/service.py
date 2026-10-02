@@ -205,6 +205,7 @@ def build_goal_state(
                 CareerGoal.is_active.is_(True),
             )
             .order_by(
+                CareerGoal.is_primary.desc(),
                 CareerGoal.priority.asc(),
                 CareerGoal.created_at.asc(),
             )
@@ -215,6 +216,7 @@ def build_goal_state(
         {
             "id": str(goal.id),
             "target_role": goal.target_role,
+            "onet_soc_code": goal.onet_soc_code,
             "target_industry": goal.target_industry,
             "target_location": goal.target_location,
             "employment_type": goal.employment_type,
@@ -222,6 +224,8 @@ def build_goal_state(
                 goal.target_timeline_months
             ),
             "priority": goal.priority,
+            "is_active": goal.is_active,
+            "is_primary": goal.is_primary,
         }
         for goal in goals
     ]

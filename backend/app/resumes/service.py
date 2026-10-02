@@ -8,7 +8,7 @@ from fastapi import HTTPException, UploadFile, status
 from pypdf import PdfReader
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-
+from backend.app.career_twin.service import create_career_twin_snapshot
 from backend.app.resumes.models import Resume, ResumeVersion
 from backend.app.resumes.parser import parse_resume_sections
 from backend.app.resumes.skill_extractor import extract_skills_from_sections
@@ -333,7 +333,6 @@ async def upload_resume(
                 extracted_skills=extracted_skills,
                 sections=sections,
             )
-
         # -----------------------------------------------------
         # Commit resume + evidence together
         # -----------------------------------------------------
@@ -343,8 +342,23 @@ async def upload_resume(
         db.refresh(resume)
         db.refresh(resume_version)
 
-        return resume, resume_version
+        # -----------------------------------------------------
+        # Refresh Career Twin after successful resume evidence
+        # -----------------------------------------------------
 
+        if (
+            resume_version.extraction_status == "COMPLETED"
+            and resume_version.extracted_text
+        ):
+            create_career_twin_snapshot(
+                db=db,
+                user_id=user_id,
+                trigger_type="RESUME_PROCESSED",
+                source_type="RESUME",
+                source_reference=str(resume_version.id),
+            )
+
+        return resume, resume_version
     except HTTPException:
         db.rollback()
 

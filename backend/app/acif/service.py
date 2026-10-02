@@ -178,6 +178,13 @@ def get_career_gap_analysis(
         career_id=career_id,
     )
 
+    current_states = get_current_skill_states(
+        db=db,
+        user_id=user_id,
+    )
+
+    skill_states = current_states["skills"]
+
     competency_rows = db.scalars(
         select(CareerSkillRequirement).where(
             CareerSkillRequirement.career_id
@@ -194,16 +201,20 @@ def get_career_gap_analysis(
             "scale_name": row.scale_name,
             "data_value": row.data_value,
             "not_relevant": row.not_relevant,
-            "recommend_suppress": row.recommend_suppress,
+            "recommend_suppress": (
+                row.recommend_suppress
+            ),
         }
         for row in competency_rows
     ]
 
     gap_analysis = build_gap_analysis(
+        db=db,
         software_alignment=career_match[
             "software_alignment"
         ],
         competency_rows=competency_data,
+        skill_states=skill_states,
     )
 
     return {
@@ -544,19 +555,23 @@ def simulate_career_skill_evidence(
         for row in competency_rows
     ]
 
-    before_gap = build_gap_analysis(
-        software_alignment=before_match[
-            "software_alignment"
-        ],
-        competency_rows=competency_data,
-    )
+    gap_analysis = build_gap_analysis(
+    db=db,
+    software_alignment=career_match[
+        "software_alignment"
+    ],
+    competency_rows=competency_data,
+    skill_states=skill_states,
+)
 
     after_gap = build_gap_analysis(
-        software_alignment=after_match[
-            "software_alignment"
-        ],
-        competency_rows=competency_data,
-    )
+    db=db,
+    software_alignment=after_match[
+        "software_alignment"
+    ],
+    competency_rows=competency_data,
+    skill_states=simulated_skill_states,
+)
 
     before_readiness = build_readiness_dimensions(
         gap_analysis=before_gap,

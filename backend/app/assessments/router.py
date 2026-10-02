@@ -15,12 +15,16 @@ from backend.app.assessments.schemas import (
     AssessmentQuestionResponse,
     AssessmentAttemptResultResponse,
     AssessmentSubmitRequest,
+    CareerAssessmentRecommendationsResponse,
 )
 from backend.app.assessments.service import (
     get_active_assessments,
     get_assessment_or_404,
     get_skill_or_404,
     submit_assessment,
+)
+from backend.app.assessments.recommendations import (
+    get_career_assessment_recommendations,
 )
 from backend.app.auth.dependencies import get_current_user
 from backend.app.auth.models import User
@@ -64,7 +68,20 @@ def list_assessments(
         )
 
     return response
-
+@router.get(
+    "/recommendations/careers/{career_id}",
+    response_model=CareerAssessmentRecommendationsResponse,
+)
+def get_recommended_assessments(
+    career_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_career_assessment_recommendations(
+        db=db,
+        user_id=current_user.id,
+        career_id=career_id,
+    )
 
 @router.get(
     "/{assessment_id}",

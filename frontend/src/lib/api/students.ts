@@ -449,23 +449,27 @@ export async function deleteCertification(
 
 export interface CareerGoal extends BaseRecord {
   target_role: string;
+  onet_soc_code: string | null;
   target_industry: string | null;
   target_location: string | null;
   employment_type: string | null;
   target_timeline_months: number | null;
   priority: number;
   is_active: boolean;
+  is_primary: boolean;
   notes: string | null;
 }
 
 export interface CareerGoalData {
   target_role: string;
+  onet_soc_code?: string | null;
   target_industry?: string | null;
   target_location?: string | null;
   employment_type?: string | null;
   target_timeline_months?: number | null;
   priority?: number;
   is_active?: boolean;
+  is_primary?: boolean;
   notes?: string | null;
 }
 
@@ -488,6 +492,18 @@ export async function getCareerGoals(
 ): Promise<CareerGoal[]> {
   return apiRequest<CareerGoal[]>(
     "/students/career-goals",
+    {
+      method: "GET",
+      accessToken,
+    }
+  );
+}
+
+export async function getPrimaryCareerGoal(
+  accessToken: string
+): Promise<CareerGoal> {
+  return apiRequest<CareerGoal>(
+    "/students/career-goals/primary",
     {
       method: "GET",
       accessToken,

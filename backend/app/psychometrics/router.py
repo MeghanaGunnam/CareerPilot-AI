@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.auth.dependencies import get_current_user
 from backend.app.auth.models import User
+from backend.app.career_twin.service import create_career_twin_snapshot
 from backend.app.core.database import get_db
 from backend.app.psychometrics.questions import (
     RESPONSE_OPTIONS,
@@ -57,11 +58,23 @@ def submit_riasec_assessment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return create_assessment(
+    assessment_result = create_assessment(
         db=db,
         user_id=current_user.id,
         answers=payload.answers,
     )
+
+    create_career_twin_snapshot(
+        db=db,
+        user_id=current_user.id,
+        trigger_type="RIASEC_ASSESSMENT_COMPLETED",
+        source_type="RIASEC_ASSESSMENT",
+        source_reference=str(
+            assessment_result.assessment_id
+        ),
+    )
+
+    return assessment_result
 
 
 @router.get(

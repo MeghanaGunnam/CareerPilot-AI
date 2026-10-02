@@ -8,6 +8,23 @@ import {
   logout,
   type User,
 } from "@/lib/api/auth";
+import {
+  getPrimaryCareerGoal,
+  getStudentProfile,
+  getEducations,
+  getExperiences,
+  getProjects,
+  getCertifications,
+  type CareerGoal,
+  type StudentProfile,
+  type Education,
+  type Experience,
+  type Project,
+  type Certification,
+} from "@/lib/api/students";
+import {
+  resolveCareerByOnetCode,
+} from "@/lib/api/careers";
 
 import {
   getCareerReadiness,
@@ -20,14 +37,13 @@ import {
   type MinimumActionPathResponse,
   type ReadinessMetric,
 } from "@/lib/api/acif";
+
 import WhatIfSimulator from "./WhatIfSimulator";
+
 const ACCESS_TOKEN_KEY = "careerpilot_access_token";
 const REFRESH_TOKEN_KEY = "careerpilot_refresh_token";
 
-const TARGET_ROLE = "Machine Learning Engineer";
 
-const TARGET_CAREER_ID =
-  "73a37510-446b-4373-bb92-f56bf1d89546";
 
 function formatPercent(value: number | null) {
   if (value === null) {
@@ -58,7 +74,7 @@ function ReadinessCard({
     metric.score !== null
       ? Math.max(
           0,
-          Math.min(100, metric.score * 100)
+          Math.min(100, metric.score * 100),
         )
       : 0;
 
@@ -95,12 +111,56 @@ function ReadinessCard({
     </article>
   );
 }
+function ProfileSummaryCard({
+  label,
+  count,
+  detail,
+}: {
+  label: string;
+  count: number;
+  detail: string;
+}) {
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-slate-900">
+          {label}
+        </p>
 
+        <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-100 px-2 text-xs font-bold text-blue-700">
+          {count}
+        </span>
+      </div>
+
+      <p className="mt-3 line-clamp-2 text-xs leading-5 text-slate-500">
+        {detail}
+      </p>
+    </article>
+  );
+}
 export default function DashboardPage() {
   const router = useRouter();
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] =
+    useState<User | null>(null);
+  const [primaryCareerGoal, setPrimaryCareerGoal] =
+  useState<CareerGoal | null>(null);
+  const [resolvedCareerId, setResolvedCareerId] =
+    useState<string | null>(null);
+  const [studentProfile, setStudentProfile] =
+  useState<StudentProfile | null>(null);
 
+  const [educations, setEducations] =
+  useState<Education[]>([]);
+
+  const [experiences, setExperiences] =
+  useState<Experience[]>([]);
+
+  const [projects, setProjects] =
+  useState<Project[]>([]);
+
+  const [certifications, setCertifications] =
+  useState<Certification[]>([]);
   const [readiness, setReadiness] =
     useState<CareerReadinessResponse | null>(null);
 
@@ -113,11 +173,13 @@ export default function DashboardPage() {
   const [minimumPath, setMinimumPath] =
     useState<MinimumActionPathResponse | null>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] =
+    useState(true);
 
   const [error, setError] =
     useState<string | null>(null);
-
+  const [careerTwinMissing, setCareerTwinMissing] =
+  useState(false);
   useEffect(() => {
     async function loadDashboard() {
       const accessToken =
@@ -130,52 +192,105 @@ export default function DashboardPage() {
 
       try {
         const [
-          currentUser,
+  currentUser,
+  primaryGoal,
+  educationsResponse,
+  experiencesResponse,
+  projectsResponse,
+  certificationsResponse,
+] = await Promise.all([
+  getCurrentUser(accessToken),
+  getPrimaryCareerGoal(accessToken),
+  getEducations(accessToken),
+  getExperiences(accessToken),
+  getProjects(accessToken),
+  getCertifications(accessToken),
+]);
+
+let profileResponse: StudentProfile | null = null;
+
+try {
+  profileResponse =
+    await getStudentProfile(accessToken);
+} catch {
+  profileResponse = null;
+}
+
+if (!primaryGoal.onet_soc_code) {
+  throw new Error(
+    "Your primary career goal does not have an O*NET occupation mapping."
+  );
+}
+
+const targetCareer = await resolveCareerByOnetCode(
+  primaryGoal.target_role,
+  primaryGoal.onet_soc_code
+);
+
+const careerId = targetCareer.id;
+
+        const [
           readinessResponse,
           gapResponse,
           gpsResponse,
           minimumPathResponse,
         ] = await Promise.all([
-          getCurrentUser(accessToken),
-
           getCareerReadiness(
             accessToken,
-            TARGET_CAREER_ID
+            careerId,
           ),
 
           getCareerGapAnalysis(
             accessToken,
-            TARGET_CAREER_ID
+            careerId,
           ),
 
           getCareerGps(
             accessToken,
-            TARGET_CAREER_ID
+            careerId,
           ),
 
           getMinimumActionPath(
             accessToken,
-            TARGET_CAREER_ID
+            careerId,
           ),
         ]);
 
-        setUser(currentUser);
-        setReadiness(readinessResponse);
-        setGapAnalysis(gapResponse);
-        setCareerGps(gpsResponse);
-        setMinimumPath(minimumPathResponse);
-      } catch (err) {
-        console.error(
-          "Dashboard loading failed:",
-          err
-        );
+setUser(currentUser);
+setStudentProfile(profileResponse);
+setEducations(educationsResponse);
+setExperiences(experiencesResponse);
+setProjects(projectsResponse);
+setCertifications(certificationsResponse);
 
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load your career intelligence dashboard."
-        );
-      } finally {
+setResolvedCareerId(careerId);
+setReadiness(readinessResponse);
+setGapAnalysis(gapResponse);
+setCareerGps(gpsResponse);
+setMinimumPath(minimumPathResponse);
+setPrimaryCareerGoal(primaryGoal);
+      } catch (err) {
+  const message =
+    err instanceof Error
+      ? err.message
+      : "Unable to load your career intelligence dashboard.";
+
+  if (
+    message
+      .toLowerCase()
+      .includes("career twin has not been created yet")
+  ) {
+    setCareerTwinMissing(true);
+    setError(null);
+  } else {
+    console.error(
+      "Dashboard loading failed:",
+      err,
+    );
+
+    setError(message);
+  }
+} finally {
         setIsLoading(false);
       }
     }
@@ -194,21 +309,21 @@ export default function DashboardPage() {
       if (accessToken && refreshToken) {
         await logout(
           accessToken,
-          refreshToken
+          refreshToken,
         );
       }
     } catch (error) {
       console.error(
         "Logout request failed:",
-        error
+        error,
       );
     } finally {
       sessionStorage.removeItem(
-        ACCESS_TOKEN_KEY
+        ACCESS_TOKEN_KEY,
       );
 
       sessionStorage.removeItem(
-        REFRESH_TOKEN_KEY
+        REFRESH_TOKEN_KEY,
       );
 
       router.replace("/login");
@@ -229,7 +344,82 @@ export default function DashboardPage() {
       </main>
     );
   }
+  if (careerTwinMissing) {
+  return (
+    <main className="min-h-screen bg-slate-50">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+          <div>
+            <p className="text-xl font-bold text-slate-950">
+              CareerPilot AI
+            </p>
 
+            <p className="text-xs text-slate-500">
+              Adaptive Career Intelligence
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+          >
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-4xl px-6 py-16">
+        <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm sm:p-10">
+          <div className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-blue-700">
+            Career Twin setup
+          </div>
+
+          <h1 className="mt-5 text-3xl font-bold tracking-tight text-slate-950">
+            Build your Career Twin
+          </h1>
+
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
+            Your Career Twin has not been created yet. Complete
+            your initial career interest assessment so CareerPilot
+            can create your first evidence-aware snapshot and begin
+            generating personalized career intelligence.
+          </p>
+
+          <div className="mt-8 rounded-2xl bg-slate-50 p-6">
+            <p className="text-sm font-semibold text-slate-950">
+              Start with Career Interests
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Your responses establish the interest component of
+              your Career Twin. Resume evidence, assessments, and
+              other verified evidence can strengthen the Twin as
+              you continue using CareerPilot.
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                router.push("/assessment/riasec")
+              }
+              className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
+              Complete Career Interest Assessment
+            </button>
+          </div>
+
+          <p className="mt-6 text-xs leading-5 text-slate-500">
+            CareerPilot separates interest alignment, skill
+            evidence, competency measurements, and occupational
+            signals. These indicators do not predict employment,
+            placement, or career success.
+          </p>
+        </section>
+      </div>
+    </main>
+  );
+}
   if (error) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
@@ -261,14 +451,16 @@ export default function DashboardPage() {
   }
 
   if (
-    !user ||
-    !readiness ||
-    !gapAnalysis ||
-    !careerGps ||
-    !minimumPath
-  ) {
-    return null;
-  }
+  !user ||
+  !primaryCareerGoal ||
+  !resolvedCareerId ||
+  !readiness ||
+  !gapAnalysis ||
+  !careerGps ||
+  !minimumPath
+) {
+  return null;
+}
 
   const readinessData = readiness.readiness;
 
@@ -291,18 +483,19 @@ export default function DashboardPage() {
     competencyRequirements.filter(
       (item) =>
         item.student_measurement_status ===
-        "NOT_ASSESSED"
+        "NOT_ASSESSED",
     );
 
   const gps = careerGps.career_gps;
 
   const path =
     minimumPath.minimum_action_path;
+
   const simulationTechnologies = [
-  ...strongEvidence,
-  ...evidenceNeedsStrengthening,
-  ...missingEvidence,
-];
+    ...strongEvidence,
+    ...evidenceNeedsStrengthening,
+    ...missingEvidence,
+  ];
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -324,15 +517,49 @@ export default function DashboardPage() {
             </p>
           </button>
 
-          <div className="flex items-center gap-3">
-            <button
+          <div className="flex items-center gap-2">
+  <nav className="hidden items-center gap-1 lg:flex">
+  <button
+    type="button"
+    onClick={() => router.push("/dashboard")}
+    className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+  >
+    Dashboard
+  </button>
+
+  <button
+    type="button"
+    onClick={() => router.push("/profile")}
+    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+  >
+    Profile
+  </button>
+
+  <button
+    type="button"
+    onClick={() => router.push("/resume")}
+    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+  >
+    Resume
+  </button>
+
+  <button
     type="button"
     onClick={() => router.push("/skills")}
-    className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
   >
     Skills & Evidence
   </button>
-            <div className="hidden text-right sm:block">
+
+  <button
+    type="button"
+    onClick={() => router.push("/assessment")}
+    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+  >
+    Assessments
+  </button>
+</nav>
+  <div className="hidden text-right xl:block">
               <p className="text-sm font-medium text-slate-800">
                 {user.email}
               </p>
@@ -364,7 +591,7 @@ export default function DashboardPage() {
               </p>
 
               <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-                {TARGET_ROLE}
+                {primaryCareerGoal.target_role}
               </h1>
 
               <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
@@ -399,10 +626,81 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
-        </section>
+                    </section>
 
-        <section className="mt-8">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wider text-blue-600">
+                  Profile Overview
+                </p>
+
+                <h2 className="mt-2 text-2xl font-bold text-slate-950">
+                  {studentProfile?.full_name ||
+                    "Your Career Profile"}
+                </h2>
+
+                {studentProfile?.headline && (
+                  <p className="mt-2 text-sm text-slate-600">
+                    {studentProfile.headline}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => router.push("/profile")}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Manage Profile
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <ProfileSummaryCard
+                label="Education"
+                count={educations.length}
+                detail={
+                  educations[0]
+                    ? `${educations[0].degree} · ${educations[0].institution_name}`
+                    : "Add your academic background"
+                }
+              />
+
+              <ProfileSummaryCard
+                label="Experience"
+                count={experiences.length}
+                detail={
+                  experiences[0]
+                    ? `${experiences[0].job_title} · ${experiences[0].company_name}`
+                    : "Add internships or work experience"
+                }
+              />
+
+              <ProfileSummaryCard
+                label="Projects"
+                count={projects.length}
+                detail={
+                  projects[0]
+                    ? projects[0].title
+                    : "Add evidence-building projects"
+                }
+              />
+
+              <ProfileSummaryCard
+                label="Certifications"
+                count={certifications.length}
+                detail={
+                  certifications[0]
+                    ? certifications[0].name
+                    : "Add relevant certifications"
+                }
+              />
+            </div>
+          </section>
+
+          <section className="mt-8">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wider text-blue-600">
                 ACIF Readiness Dimensions
@@ -433,7 +731,8 @@ export default function DashboardPage() {
             <ReadinessCard
               title="Technology Evidence Coverage"
               metric={
-                readinessData.technology_evidence_coverage
+                readinessData
+                  .technology_evidence_coverage
               }
               description={`${readinessData.technology_evidence_coverage.weak_evidence_count ?? 0} of ${readinessData.technology_evidence_coverage.total_market_signals ?? 0} market technology signals currently have supporting evidence.`}
             />
@@ -441,7 +740,8 @@ export default function DashboardPage() {
             <ReadinessCard
               title="Evidence Strength"
               metric={
-                readinessData.technology_evidence_strength
+                readinessData
+                  .technology_evidence_strength
               }
               description="Average ACIF evidence confidence across technologies for which supporting evidence was found."
             />
@@ -449,7 +749,8 @@ export default function DashboardPage() {
             <ReadinessCard
               title="Competency Measurement Coverage"
               metric={
-                readinessData.competency_measurement_coverage
+                readinessData
+                  .competency_measurement_coverage
               }
               description={`${readinessData.competency_measurement_coverage.measured_competency_count ?? 0} of ${readinessData.competency_measurement_coverage.total_competency_count ?? 0} occupational competencies currently have student measurements.`}
             />
@@ -546,19 +847,19 @@ export default function DashboardPage() {
                           <p className="mt-1 text-xs text-slate-500">
                             Evidence:{" "}
                             {item.evidence_families?.join(
-                              " + "
+                              " + ",
                             ) || "Available"}
                           </p>
                         </div>
 
                         <span className="w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
                           {formatConfidence(
-                            item.evidence_confidence
+                            item.evidence_confidence,
                           )}
                         </span>
                       </div>
                     </div>
-                  )
+                  ),
                 )}
               </div>
             </div>
@@ -645,7 +946,7 @@ export default function DashboardPage() {
                           <p className="mt-3 text-xs font-medium text-slate-500">
                             Current evidence confidence:{" "}
                             {formatPercent(
-                              item.current_evidence_confidence
+                              item.current_evidence_confidence,
                             )}
                           </p>
                         )}
@@ -735,8 +1036,9 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-6 space-y-3">
-              {gps.actions.slice(0, 5).map(
-                (action) => (
+              {gps.actions
+                .slice(0, 5)
+                .map((action) => (
                   <div
                     key={action.sequence}
                     className="rounded-xl border border-slate-200 p-4"
@@ -759,8 +1061,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                )
-              )}
+                ))}
             </div>
 
             <p className="mt-5 text-xs leading-5 text-slate-500">
@@ -828,32 +1129,36 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-  <button
-    type="button"
-    onClick={() =>
-      router.push("/assessment/riasec")
-    }
-    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-  >
-    Review Career Interest Assessment
-  </button>
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(
+                    "/assessment/riasec",
+                  )
+                }
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Review Career Interest Assessment
+              </button>
 
-  <button
-    type="button"
-    onClick={() =>
-      router.push("/assessment")
-    }
-    className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
-  >
-    Technical Assessments
-  </button>
-</div>
+              <button
+                type="button"
+                onClick={() =>
+                  router.push("/assessment")
+                }
+                className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                Technical Assessments
+              </button>
+            </div>
           </div>
         </section>
-<WhatIfSimulator
-          careerId={TARGET_CAREER_ID}
+
+        <WhatIfSimulator
+          careerId={resolvedCareerId}
           technologies={simulationTechnologies}
         />
+
         <section className="mt-10 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
           <div className="grid gap-6 md:grid-cols-3">
             <div>
