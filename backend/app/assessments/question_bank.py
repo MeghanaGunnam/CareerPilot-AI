@@ -1,3 +1,6 @@
+from backend.app.assessments.catalog_questions import PYTHON_QUESTIONS, SQL_QUESTIONS
+
+
 TECHNICAL_ASSESSMENTS = [
     {
         "skill": "Java",
@@ -373,3 +376,22 @@ TECHNICAL_ASSESSMENTS = [
         ],
     },
 ]
+
+TECHNICAL_ASSESSMENTS.extend([
+    {
+        "skill": "Python",
+        "title": "Python Fundamentals Assessment",
+        "description": "Evaluates Python 3 expressions, collections, control flow, functions, exceptions, and file handling.",
+        "difficulty": "FOUNDATIONAL",
+        "version": 1,
+        "questions": PYTHON_QUESTIONS,
+    },
+    {
+        "skill": "SQL",
+        "title": "SQL Fundamentals Assessment",
+        "description": "Evaluates portable SQL filtering, NULL semantics, aggregation, joins, ordering, keys, updates, transactions, and parameterization.",
+        "difficulty": "FOUNDATIONAL",
+        "version": 1,
+        "questions": SQL_QUESTIONS,
+    },
+])

@@ -209,9 +209,8 @@ export default function EvidencePage() {
     }
 
     try {
-      setPageError("");
-
       const result = await getMySkills(accessToken);
+      setPageError("");
       setSkillsData(result);
     } catch (error) {
       setPageError(
@@ -225,8 +224,24 @@ export default function EvidencePage() {
   }, [router]);
 
   useEffect(() => {
-    void loadSkills();
-  }, [loadSkills]);
+    const token = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+    let cancelled = false;
+    getMySkills(token).then((result) => {
+      if (!cancelled) {
+        setSkillsData(result);
+        setPageError("");
+      }
+    }).catch((error: unknown) => {
+      if (!cancelled) setPageError(error instanceof Error ? error.message : "Career evidence could not be loaded.");
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [router]);
 
   const evidenceSourceCount = useMemo(() => {
     if (!skillsData) {

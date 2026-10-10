@@ -1,15 +1,14 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.assessments.models import (
-    AssessmentAnswer,
     AssessmentQuestion,
 )
 from backend.app.assessments.schemas import (
-    AssessmentAnswerResult,
+    AssessmentAttemptSummaryResponse,
     AssessmentDetailResponse,
     AssessmentListItemResponse,
     AssessmentQuestionResponse,
@@ -20,12 +19,19 @@ from backend.app.assessments.schemas import (
 from backend.app.assessments.service import (
     get_active_assessments,
     get_assessment_or_404,
+    get_catalog_metadata,
     get_skill_or_404,
+    get_user_attempt_or_404,
+    get_user_attempts,
+    serialize_attempt_result,
+    serialize_attempt_summary,
     submit_assessment,
 )
 from backend.app.assessments.recommendations import (
     get_career_assessment_recommendations,
+    get_my_assessment_recommendations,
 )
+from backend.app.assessments.catalog import get_controlled_catalog_metadata
 from backend.app.auth.dependencies import get_current_user
 from backend.app.auth.models import User
 from backend.app.core.database import get_db
@@ -46,17 +52,18 @@ def list_assessments(
     current_user: User = Depends(get_current_user),
 ):
     assessments = get_active_assessments(db)
+    question_counts, latest_attempts = get_catalog_metadata(
+        db, current_user.id, [assessment.id for assessment in assessments]
+    )
 
     response: list[AssessmentListItemResponse] = []
 
     for assessment in assessments:
-        skill = get_skill_or_404(
-            db=db,
-            skill_id=assessment.skill_id,
-        )
+        skill = assessment.skill
 
         response.append(
             AssessmentListItemResponse(
+                catalog_metadata=get_controlled_catalog_metadata(assessment, skill.canonical_name),
                 id=assessment.id,
                 skill_id=skill.id,
                 skill_name=skill.canonical_name,
@@ -64,6 +71,11 @@ def list_assessments(
                 description=assessment.description,
                 difficulty=assessment.difficulty,
                 version=assessment.version,
+                question_count=question_counts.get(assessment.id, 0),
+                latest_attempt=(
+                    serialize_attempt_summary(latest_attempts[assessment.id])
+                    if assessment.id in latest_attempts else None
+                ),
             )
         )
 
@@ -82,6 +94,43 @@ def get_recommended_assessments(
         user_id=current_user.id,
         career_id=career_id,
     )
+
+@router.get("/recommendations/me", response_model=CareerAssessmentRecommendationsResponse)
+def get_my_recommended_assessments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_my_assessment_recommendations(db=db, user_id=current_user.id)
+
+
+@router.get(
+    "/attempts",
+    response_model=list[AssessmentAttemptSummaryResponse],
+)
+def list_assessment_attempts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    return [
+        serialize_attempt_summary(attempt)
+        for attempt in get_user_attempts(db, current_user.id, limit, offset)
+    ]
+
+
+@router.get(
+    "/attempts/{attempt_id}",
+    response_model=AssessmentAttemptResultResponse,
+)
+def get_assessment_attempt(
+    attempt_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    attempt = get_user_attempt_or_404(db, current_user.id, attempt_id)
+    return serialize_attempt_result(db, attempt)
+
 
 @router.get(
     "/{assessment_id}",
@@ -116,6 +165,7 @@ def get_assessment(
     )
 
     return AssessmentDetailResponse(
+        catalog_metadata=get_controlled_catalog_metadata(assessment, skill.canonical_name),
         id=assessment.id,
         skill_id=skill.id,
         skill_name=skill.canonical_name,
@@ -152,61 +202,4 @@ def submit_technical_assessment(
         payload=payload,
     )
 
-    assessment = get_assessment_or_404(
-        db=db,
-        assessment_id=attempt.assessment_id,
-    )
-
-    skill = get_skill_or_404(
-        db=db,
-        skill_id=assessment.skill_id,
-    )
-
-    answers = list(
-        db.scalars(
-            select(AssessmentAnswer)
-            .where(
-                AssessmentAnswer.attempt_id
-                == attempt.id
-            )
-            .order_by(
-                AssessmentAnswer.answered_at.asc()
-            )
-        ).all()
-    )
-
-    answer_results: list[
-        AssessmentAnswerResult
-    ] = []
-
-    for answer in answers:
-        question = db.get(
-            AssessmentQuestion,
-            answer.question_id,
-        )
-
-        if question is None:
-            continue
-
-        answer_results.append(
-            AssessmentAnswerResult(
-                question_id=question.id,
-                selected_option=answer.selected_option,
-                correct_option=question.correct_option,
-                is_correct=answer.is_correct,
-                explanation=question.explanation,
-            )
-        )
-
-    return AssessmentAttemptResultResponse(
-        attempt_id=attempt.id,
-        assessment_id=assessment.id,
-        skill_id=skill.id,
-        skill_name=skill.canonical_name,
-        status=attempt.status,
-        raw_score=attempt.raw_score,
-        total_questions=attempt.total_questions,
-        percentage=attempt.percentage,
-        completed_at=attempt.completed_at,
-        answers=answer_results,
-    )
+    return serialize_attempt_result(db, attempt)

@@ -1,31 +1,42 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ApiError } from "@/lib/api/client";
 
 import {
   AssessmentDetail,
+  AssessmentAttemptSummary,
   AssessmentRecommendation,
   AssessmentSubmissionResponse,
   AssessmentSummary,
   CareerAssessmentRecommendationsResponse,
   getAssessment,
+  getAssessmentAttempt,
+  getAssessmentAttempts,
   getAssessments,
-  getCareerAssessmentRecommendations,
+  getMyAssessmentRecommendations,
   submitAssessment,
 } from "@/lib/api/assessments";
-import {
-  getPrimaryCareerGoal,
-} from "@/lib/api/students";
-
-import {
-  resolveCareerByOnetCode,
-} from "@/lib/api/careers";
 const ACCESS_TOKEN_KEY = "careerpilot_access_token";
 
 
 
 type Answers = Record<string, string>;
+
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError && error.status === 401) {
+    return "Your session has expired. Please sign in again to continue.";
+  }
+  if (error instanceof ApiError && error.status === 403) {
+    return "You do not have permission to access this assessment or attempt.";
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
+function formatDate(value: string | null) {
+  return value ? new Date(value).toLocaleString() : "Not completed";
+}
 
 function formatDifficulty(value: string) {
   return value
@@ -57,6 +68,14 @@ export default function AssessmentPage() {
   const [loading, setLoading] = useState(true);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submitGuard = useRef(false);
+  const openingGuard = useRef(false);
+  const [confirming, setConfirming] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [attempts, setAttempts] = useState<AssessmentAttemptSummary[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyOffset, setHistoryOffset] = useState(0);
 
   const [error, setError] = useState("");
 
@@ -77,36 +96,22 @@ export default function AssessmentPage() {
       setAssessments(assessmentResponse);
 
       try {
-        const primaryGoal = await getPrimaryCareerGoal(accessToken);
-
-        if (!primaryGoal.onet_soc_code) {
-          return;
-        }
-
-        const targetCareer = await resolveCareerByOnetCode(
-          primaryGoal.target_role,
-          primaryGoal.onet_soc_code
-        );
-
-        const careerId = targetCareer.id;
         const recommendationResponse =
-          await getCareerAssessmentRecommendations(
-            accessToken,
-            careerId
-          );
+          await getMyAssessmentRecommendations(accessToken);
 
-        setResolvedCareerId(careerId);
+        setResolvedCareerId(recommendationResponse.career_id);
         setRecommendations(recommendationResponse);
-      } catch {
+      } catch (recommendationError) {
         // The catalog remains usable when career recommendations are
         // unavailable or the student has not completed a mapped goal.
         setRecommendations(null);
+        if (recommendationError instanceof ApiError && [401, 403].includes(recommendationError.status)) {
+          setError(errorMessage(recommendationError, "Recommendations could not be loaded."));
+        }
       }
     } catch (loadError) {
       setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Assessments could not be loaded."
+        errorMessage(loadError, "Assessments could not be loaded.")
       );
     } finally {
       setLoading(false);
@@ -115,7 +120,51 @@ export default function AssessmentPage() {
 
   void loadPage();
 }, [router]);
+  async function loadHistory(offset = 0) {
+    const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!accessToken) {
+      router.replace("/login");
+      return;
+    }
+    setShowHistory(true);
+    setHistoryLoading(true);
+    setHistoryError("");
+    setHistoryOffset(offset);
+    setAttempts(null);
+    try {
+      setAttempts(await getAssessmentAttempts(accessToken, offset));
+    } catch (historyLoadError) {
+      setHistoryError(errorMessage(historyLoadError, "Attempt history could not be loaded."));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function openAttempt(attemptId: string) {
+    if (openingGuard.current || submitGuard.current) return;
+    const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!accessToken) {
+      router.replace("/login");
+      return;
+    }
+    openingGuard.current = true;
+    setOpeningId(attemptId);
+    setError("");
+    try {
+      const persistedResult = await getAssessmentAttempt(accessToken, attemptId);
+      setActiveAssessment(null);
+      setResult(persistedResult);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (openError) {
+      setError(errorMessage(openError, "Saved result could not be opened."));
+    } finally {
+      openingGuard.current = false;
+      setOpeningId(null);
+    }
+  }
+
   async function handleOpenAssessment(assessmentId: string) {
+    if (openingGuard.current || submitGuard.current) return;
     const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
 
     if (!accessToken) {
@@ -123,11 +172,13 @@ export default function AssessmentPage() {
       return;
     }
 
+    openingGuard.current = true;
     try {
       setOpeningId(assessmentId);
       setError("");
       setResult(null);
       setAnswers({});
+      setConfirming(false);
 
       const response = await getAssessment(
         accessToken,
@@ -137,11 +188,10 @@ export default function AssessmentPage() {
       setActiveAssessment(response);
     } catch (openError) {
       setError(
-        openError instanceof Error
-          ? openError.message
-          : "Assessment could not be opened."
+        errorMessage(openError, "Assessment could not be opened.")
       );
     } finally {
+      openingGuard.current = false;
       setOpeningId(null);
     }
   }
@@ -150,14 +200,15 @@ export default function AssessmentPage() {
     questionId: string,
     selectedOption: string
   ) {
+    if (submitGuard.current || confirming) return;
     setAnswers((current) => ({
       ...current,
       [questionId]: selectedOption,
     }));
   }
 
-  async function handleSubmit() {
-    if (!activeAssessment) {
+  async function handleSubmit(confirmed = false) {
+    if (!activeAssessment || submitGuard.current || result) {
       return;
     }
 
@@ -180,6 +231,13 @@ export default function AssessmentPage() {
       return;
     }
 
+    if (!confirmed) {
+      setError("");
+      setConfirming(true);
+      return;
+    }
+
+    submitGuard.current = true;
     try {
       setSubmitting(true);
       setError("");
@@ -196,20 +254,26 @@ export default function AssessmentPage() {
       );
 
       setResult(response);
+      setConfirming(false);
+      setAttempts(null);
+      setAssessments((current) => current.map((assessment) =>
+        assessment.id === response.assessment_id
+          ? { ...assessment, latest_attempt: response }
+          : assessment
+      ));
 
       try {
   if (resolvedCareerId) {
     const updatedRecommendations =
-      await getCareerAssessmentRecommendations(
-        accessToken,
-        resolvedCareerId
-      );
+      await getMyAssessmentRecommendations(accessToken);
 
     setRecommendations(updatedRecommendations);
   }
-} catch {
+} catch (refreshError) {
   // The assessment result remains valid even if refreshing
   // recommendations temporarily fails.
+  setRecommendations(null);
+  setError(errorMessage(refreshError, "Recommendations could not be refreshed. Your assessment result was saved."));
 }
 
       window.scrollTo({
@@ -217,21 +281,25 @@ export default function AssessmentPage() {
         behavior: "smooth",
       });
     } catch (submitError) {
+      const authenticationError = submitError instanceof ApiError && [401, 403].includes(submitError.status);
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Assessment could not be submitted."
+        errorMessage(submitError, "Assessment could not be submitted.") +
+        (authenticationError ? "" : " If the connection was interrupted, check Attempt History before retrying to avoid saving another attempt.")
       );
     } finally {
+      submitGuard.current = false;
       setSubmitting(false);
     }
   }
 
   function resetAssessment() {
+    if (submitGuard.current) return;
     setActiveAssessment(null);
     setResult(null);
     setAnswers({});
     setError("");
+    setConfirming(false);
+    if (showHistory) void loadHistory();
   }
 
   function renderRecommendationCard(
@@ -268,26 +336,26 @@ export default function AssessmentPage() {
 
         <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            O*NET competency
+            {recommendation.competency ? "O*NET competency" : "O*NET technology signal"}
           </p>
 
           <p className="mt-2 font-semibold text-slate-950">
-            {recommendation.competency.element_name}
+            {recommendation.competency?.element_name ?? recommendation.skill_name}
           </p>
 
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-600">
             <span>
-              {recommendation.competency.skill_type}
+              {recommendation.competency?.skill_type ?? "Occupational signal, not a mandatory requirement"}
             </span>
 
-            {recommendation.competency.importance !== null && (
+            {recommendation.competency && recommendation.competency.importance !== null && (
               <span>
                 Importance{" "}
                 {recommendation.competency.importance.toFixed(2)}
               </span>
             )}
 
-            {recommendation.competency.level !== null && (
+            {recommendation.competency && recommendation.competency.level !== null && (
               <span>
                 Level {recommendation.competency.level.toFixed(2)}
               </span>
@@ -339,7 +407,7 @@ export default function AssessmentPage() {
     );
   }
 
-  if (result && activeAssessment) {
+  if (result) {
     return (
       <main className="min-h-screen bg-slate-50">
         <header className="border-b border-slate-200 bg-white">
@@ -356,6 +424,7 @@ export default function AssessmentPage() {
 
             <button
               type="button"
+              disabled={submitting}
               onClick={() => router.push("/dashboard")}
               className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
             >
@@ -365,14 +434,18 @@ export default function AssessmentPage() {
         </header>
 
         <div className="mx-auto max-w-5xl px-6 py-10">
+          {error && <p role="alert" className="mb-6 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
           <section className="rounded-3xl bg-slate-950 p-8 text-white">
             <p className="text-sm font-semibold uppercase tracking-wider text-blue-300">
-              Assessment completed
+              Saved assessment result
             </p>
 
             <h1 className="mt-3 text-3xl font-bold">
-              {activeAssessment.title}
+              {result.assessment_title}
             </h1>
+            <p className="mt-3 text-sm text-slate-300">
+              {result.skill_name} · Version {result.assessment_version} · Completed: {formatDate(result.completed_at)}
+            </p>
 
             <div className="mt-7 grid gap-4 sm:grid-cols-3">
               <div className="rounded-2xl bg-white/10 p-5">
@@ -381,7 +454,7 @@ export default function AssessmentPage() {
                 </p>
 
                 <p className="mt-2 text-3xl font-bold">
-                  {result.percentage.toFixed(0)}%
+                  {result.percentage === null ? "Not scored" : `${result.percentage.toFixed(0)}%`}
                 </p>
               </div>
 
@@ -391,7 +464,7 @@ export default function AssessmentPage() {
                 </p>
 
                 <p className="mt-2 text-3xl font-bold">
-                  {result.raw_score}/{result.total_questions}
+                  {result.raw_score ?? "—"}/{result.total_questions ?? "—"}
                 </p>
               </div>
 
@@ -422,21 +495,23 @@ export default function AssessmentPage() {
               Review your answers and the explanation for each
               question.
             </p>
+            {!activeAssessment && (
+              <p className="mt-2 text-sm text-slate-600">
+                Saved answers are shown by question ID; historical question text is not included in the saved result.
+              </p>
+            )}
+            {result.answers.length === 0 && <p className="mt-4 text-sm text-slate-600">No saved answers are available for this attempt.</p>}
 
             <div className="mt-6 space-y-5">
-              {activeAssessment.questions.map(
-                (question, index) => {
-                  const answerResult = result.answers.find(
-                    (item) => item.question_id === question.id
+              {result.answers.map(
+                (answerResult, index) => {
+                  const question = activeAssessment?.questions.find(
+                    (item) => item.id === answerResult.question_id
                   );
-
-                  if (!answerResult) {
-                    return null;
-                  }
 
                   return (
                     <article
-                      key={question.id}
+                      key={answerResult.question_id}
                       className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
                     >
                       <div className="flex items-start justify-between gap-4">
@@ -446,7 +521,7 @@ export default function AssessmentPage() {
                           </p>
 
                           <h3 className="mt-2 font-semibold leading-6 text-slate-950">
-                            {question.question_text}
+                            {question?.question_text ?? `Question ID: ${answerResult.question_id}`}
                           </h3>
                         </div>
 
@@ -491,7 +566,7 @@ export default function AssessmentPage() {
                         </p>
 
                         <p className="mt-2 text-sm leading-6 text-slate-700">
-                          {answerResult.explanation}
+                            {answerResult.explanation ?? "No explanation available."}
                         </p>
                       </div>
                     </article>
@@ -504,6 +579,7 @@ export default function AssessmentPage() {
           <div className="mt-8 flex flex-wrap gap-3">
             <button
               type="button"
+              disabled={submitting}
               onClick={resetAssessment}
               className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700"
             >
@@ -512,6 +588,7 @@ export default function AssessmentPage() {
 
             <button
               type="button"
+              disabled={submitting}
               onClick={() => router.push("/skills")}
               className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-blue-700"
             >
@@ -520,6 +597,7 @@ export default function AssessmentPage() {
 
             <button
               type="button"
+              disabled={submitting}
               onClick={() => router.push("/dashboard")}
               className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white"
             >
@@ -559,6 +637,7 @@ export default function AssessmentPage() {
 
               <button
                 type="button"
+                disabled={submitting}
                 onClick={resetAssessment}
                 className="text-sm font-semibold text-slate-600"
               >
@@ -623,6 +702,8 @@ export default function AssessmentPage() {
                         <button
                           key={option.key}
                           type="button"
+                          disabled={submitting || confirming}
+                          aria-pressed={selected}
                           onClick={() =>
                             selectAnswer(
                               question.id,
@@ -657,10 +738,20 @@ export default function AssessmentPage() {
             )}
           </div>
 
+          {confirming && (
+            <section role="region" aria-labelledby="confirm-submit-title" className="mt-8 rounded-2xl border border-blue-200 bg-blue-50 p-6">
+              <h2 id="confirm-submit-title" className="font-semibold text-slate-950">Submit this assessment?</h2>
+              <p className="mt-2 text-sm text-slate-700">All {answeredCount} answers will be submitted and saved as a new attempt. Submitted answers cannot be changed.</p>
+              <div className="mt-4 flex gap-3">
+                <button type="button" disabled={submitting} onClick={() => setConfirming(false)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-60">Keep reviewing</button>
+                <button type="button" disabled={submitting} onClick={() => void handleSubmit(true)} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{submitting ? "Submitting..." : "Confirm submission"}</button>
+              </div>
+            </section>
+          )}
           <button
             type="button"
-            disabled={submitting}
-            onClick={handleSubmit}
+            disabled={submitting || confirming}
+            onClick={() => void handleSubmit()}
             className="mt-8 w-full rounded-xl bg-blue-600 px-6 py-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting
@@ -718,7 +809,43 @@ export default function AssessmentPage() {
           </div>
         )}
 
-        {recommendations && (
+        <nav aria-label="Assessment views" className="mt-6 flex gap-3">
+          <button type="button" aria-pressed={!showHistory} disabled={openingId !== null} onClick={() => setShowHistory(false)} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700">Assessment Catalog</button>
+          <button type="button" aria-pressed={showHistory} disabled={historyLoading || openingId !== null} onClick={() => void loadHistory()} className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">Attempt History</button>
+        </nav>
+
+        {showHistory && (
+          <section className="mt-8" aria-labelledby="history-title">
+            <h2 id="history-title" className="text-2xl font-bold text-slate-950">Your assessment attempts</h2>
+            {historyLoading ? <p role="status" className="mt-4 text-slate-600">Loading attempt history...</p> : historyError ? (
+              <div role="alert" className="mt-4 rounded-xl bg-red-50 p-4 text-red-700">
+                <p>{historyError}</p>
+                <button type="button" onClick={() => void loadHistory(historyOffset)} className="mt-3 font-semibold underline">Retry history</button>
+              </div>
+            ) : attempts !== null ? (
+              attempts.length === 0 ? <p className="mt-4 rounded-xl bg-white p-6 text-slate-600">{historyOffset === 0 ? "You have no saved assessment attempts yet." : "No more assessment attempts on this page."}</p> : (
+                <div className="mt-5 space-y-4">
+                  {attempts.map((attempt) => (
+                    <article key={attempt.attempt_id} className="rounded-2xl border border-slate-200 bg-white p-6">
+                      <h3 className="text-lg font-bold text-slate-950">{attempt.assessment_title}</h3>
+                      <p className="mt-2 text-sm text-slate-600">{attempt.skill_name} · Version {attempt.assessment_version} · {attempt.status}</p>
+                      <p className="mt-2 text-sm text-slate-700">Assessment score: {attempt.percentage === null ? "Not scored" : `${attempt.percentage.toFixed(0)}%`} · Correct answers: {attempt.raw_score ?? "—"}/{attempt.total_questions ?? "—"}</p>
+                      <p className="mt-2 text-xs text-slate-500">Started: {formatDate(attempt.started_at)} · Completed: {formatDate(attempt.completed_at)}</p>
+                      <button type="button" disabled={openingId !== null} onClick={() => void openAttempt(attempt.attempt_id)} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{openingId === attempt.attempt_id ? "Opening..." : "View saved result"}</button>
+                    </article>
+                  ))}
+                </div>
+              )
+            ) : <button type="button" onClick={() => void loadHistory()} className="mt-4 font-semibold text-blue-700 underline">Load attempt history</button>}
+            <div className="mt-5 flex items-center gap-4 text-sm">
+              <button type="button" disabled={historyLoading || openingId !== null || historyOffset === 0} onClick={() => void loadHistory(Math.max(0, historyOffset - 50))} className="font-semibold text-blue-700 disabled:opacity-40">Previous attempts</button>
+              <span className="text-slate-600">Page {Math.floor(historyOffset / 50) + 1}</span>
+              <button type="button" disabled={historyLoading || openingId !== null || attempts?.length !== 50} onClick={() => void loadHistory(historyOffset + 50)} className="font-semibold text-blue-700 disabled:opacity-40">More attempts</button>
+            </div>
+          </section>
+        )}
+
+        {!showHistory && recommendations && (
           <section className="mt-10">
             <div className="rounded-3xl bg-slate-950 p-7 text-white">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -781,7 +908,7 @@ export default function AssessmentPage() {
           </section>
         )}
 
-        <section className="mt-12">
+        {!showHistory && <section className="mt-12">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
               Assessment Catalog
@@ -836,8 +963,16 @@ export default function AssessmentPage() {
                   </p>
 
                   <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    {formatDifficulty(assessment.difficulty)}
+                    {formatDifficulty(assessment.difficulty)} · {assessment.question_count} questions
                   </p>
+                  <p className="mt-3 text-sm text-slate-600">
+                    {assessment.latest_attempt
+                      ? `Attempted · ${assessment.latest_attempt.status} · Latest assessment score: ${assessment.latest_attempt.percentage === null ? "Not scored" : `${assessment.latest_attempt.percentage.toFixed(0)}%`}`
+                      : "Not attempted"}
+                  </p>
+                  {assessment.latest_attempt && (
+                    <button type="button" disabled={openingId !== null} onClick={() => void openAttempt(assessment.latest_attempt!.attempt_id)} className="mt-3 text-sm font-semibold text-blue-700 underline disabled:opacity-60">View latest saved result</button>
+                  )}
 
                   <button
                     type="button"
@@ -849,13 +984,13 @@ export default function AssessmentPage() {
                   >
                     {openingId === assessment.id
                       ? "Opening..."
-                      : "Start Assessment"}
+                      : assessment.latest_attempt ? "Retake Assessment" : "Start Assessment"}
                   </button>
                 </article>
               ))}
             </div>
           )}
-        </section>
+        </section>}
       </div>
     </main>
   );

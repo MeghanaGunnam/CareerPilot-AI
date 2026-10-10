@@ -8,6 +8,8 @@ export interface AssessmentSummary {
   description: string | null;
   difficulty: string;
   version: number;
+  question_count: number;
+  latest_attempt: AssessmentAttemptSummary | null;
 }
 
 export interface AssessmentOption {
@@ -22,7 +24,7 @@ export interface AssessmentQuestion {
   options: AssessmentOption[];
 }
 
-export interface AssessmentDetail extends AssessmentSummary {
+export interface AssessmentDetail extends Omit<AssessmentSummary, "question_count" | "latest_attempt"> {
   questions: AssessmentQuestion[];
 }
 
@@ -43,16 +45,22 @@ export interface AssessmentResultAnswer {
   explanation: string | null;
 }
 
-export interface AssessmentSubmissionResponse {
+export interface AssessmentAttemptSummary {
   attempt_id: string;
   assessment_id: string;
+  assessment_title: string;
+  assessment_version: number;
   skill_id: string;
   skill_name: string;
   status: string;
-  raw_score: number;
-  total_questions: number;
-  percentage: number;
-  completed_at: string;
+  raw_score: number | null;
+  total_questions: number | null;
+  percentage: number | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface AssessmentSubmissionResponse extends AssessmentAttemptSummary {
   answers: AssessmentResultAnswer[];
 }
 
@@ -75,7 +83,7 @@ export interface AssessmentRecommendation {
   description: string | null;
   difficulty: string;
   version: number;
-  competency: AssessmentRecommendationCompetency;
+  competency: AssessmentRecommendationCompetency | null;
   recommendation_status: string;
   reason: string;
 }
@@ -137,4 +145,22 @@ export async function getCareerAssessmentRecommendations(
       accessToken,
     }
   );
+}
+
+export async function getAssessmentAttempts(accessToken: string, offset = 0): Promise<AssessmentAttemptSummary[]> {
+  return apiRequest<AssessmentAttemptSummary[]>(`/assessments/attempts?limit=50&offset=${offset}`, {
+    method: "GET",
+    accessToken,
+  });
+}
+
+export function getMyAssessmentRecommendations(accessToken: string) {
+  return apiRequest<CareerAssessmentRecommendationsResponse>("/assessments/recommendations/me", { accessToken });
+}
+
+export async function getAssessmentAttempt(accessToken: string, attemptId: string): Promise<AssessmentSubmissionResponse> {
+  return apiRequest<AssessmentSubmissionResponse>(`/assessments/attempts/${encodeURIComponent(attemptId)}`, {
+    method: "GET",
+    accessToken,
+  });
 }
