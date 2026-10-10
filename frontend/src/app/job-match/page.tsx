@@ -26,6 +26,7 @@ function AnalysisDetail({ analysis }: { analysis: JDAnalysis }) {
       {analysis.company && <p className="mt-2 break-words text-slate-600">{analysis.company}</p>}
       <p className="mt-2 text-xs text-slate-500">Saved {new Date(analysis.created_at).toLocaleString()} · Extractor {analysis.extractor_version}</p>
       <Link href={`/applications?jd=${encodeURIComponent(analysis.id)}`} className={`${buttonClass} mt-4 inline-block`}>Track this application</Link>
+      <Link href={`/assistant?jd=${encodeURIComponent(analysis.id)}`} className={`${buttonClass} mt-4 ml-2 inline-block`}>Ask about this saved JD</Link>
       {analysis.source_url && <p className="mt-2 break-all text-sm text-slate-600">Source URL (reference only): {analysis.source_url}</p>}
       <div className="mt-5 rounded-xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">
         FACT_FROM_JD means only that the quote appears literally in the pasted description. It does not mean the employer requires it or that a candidate meets it. Read negation and qualifiers in full. Grouping and normalized names are interpretations, not facts from the JD.

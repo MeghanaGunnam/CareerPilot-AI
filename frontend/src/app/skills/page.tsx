@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { hasAssessmentEvidence } from "@/lib/evidence-display";
 
 import {
   getMySkills,
@@ -103,9 +104,7 @@ function EvidenceItem({ evidence }: { evidence: SkillEvidence }) {
 function SkillCard({ skill }: { skill: StudentSkill }) {
   const [expanded, setExpanded] = useState(false);
 
-  const hasAssessment =
-    skill.estimated_proficiency !== null ||
-    skill.last_verified_at !== null;
+  const hasAssessment = hasAssessmentEvidence(skill.evidence);
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -145,13 +144,14 @@ function SkillCard({ skill }: { skill: StudentSkill }) {
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl bg-slate-50 p-3">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-            Estimated proficiency
+            Assessment-derived estimate
           </p>
           <p className="mt-1 font-semibold text-slate-800">
-            {skill.estimated_proficiency === null
+            {!hasAssessment || skill.estimated_proficiency === null
               ? "Not assessed"
               : formatScore(skill.estimated_proficiency)}
           </p>
+          <p className="mt-1 text-xs text-slate-500">Assessment-specific; not universal proficiency.</p>
         </div>
 
         <div className="rounded-xl bg-slate-50 p-3">

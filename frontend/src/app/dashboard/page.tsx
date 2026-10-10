@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ApiError } from "@/lib/api/client";
 
 import {
   getCurrentUser,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/api/acif";
 
 import WhatIfSimulator from "./WhatIfSimulator";
+import ModuleSummary from "./ModuleSummary";
 
 const ACCESS_TOKEN_KEY = "careerpilot_access_token";
 const REFRESH_TOKEN_KEY = "careerpilot_refresh_token";
@@ -181,7 +183,9 @@ export default function DashboardPage() {
     useState<string | null>(null);
   const [careerTwinMissing, setCareerTwinMissing] =
   useState(false);
+  const [setupMessage, setSetupMessage] = useState("Your career intelligence needs a recorded Career Twin snapshot before ACIF dimensions can be shown.");
   useEffect(() => {
+    let cancelled = false;
     async function loadDashboard() {
       const accessToken =
         sessionStorage.getItem(ACCESS_TOKEN_KEY);
@@ -201,7 +205,10 @@ export default function DashboardPage() {
   certificationsResponse,
 ] = await Promise.all([
   getCurrentUser(accessToken),
-  getPrimaryCareerGoal(accessToken),
+  getPrimaryCareerGoal(accessToken).catch((error: unknown) => {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }),
   getEducations(accessToken),
   getExperiences(accessToken),
   getProjects(accessToken),
@@ -217,10 +224,18 @@ try {
   profileResponse = null;
 }
 
-if (!primaryGoal.onet_soc_code) {
-  throw new Error(
-    "Your primary career goal does not have an O*NET occupation mapping."
-  );
+if (cancelled) return;
+setUser(currentUser);
+setStudentProfile(profileResponse);
+setEducations(educationsResponse);
+setExperiences(experiencesResponse);
+setProjects(projectsResponse);
+setCertifications(certificationsResponse);
+setPrimaryCareerGoal(primaryGoal);
+if (!primaryGoal || !primaryGoal.onet_soc_code) {
+  setSetupMessage(primaryGoal ? "Your target role needs an O*NET occupational mapping before career-specific ACIF dimensions are available." : "Choose your primary target career to begin personalized career intelligence. You can still use the modules below.");
+  setCareerTwinMissing(true);
+  return;
 }
 
 const targetCareer = await resolveCareerByOnetCode(
@@ -257,13 +272,7 @@ const careerId = targetCareer.id;
           ),
         ]);
 
-setUser(currentUser);
-setStudentProfile(profileResponse);
-setEducations(educationsResponse);
-setExperiences(experiencesResponse);
-setProjects(projectsResponse);
-setCertifications(certificationsResponse);
-
+if (cancelled) return;
 setResolvedCareerId(careerId);
 setReadiness(readinessResponse);
 setGapAnalysis(gapResponse);
@@ -271,32 +280,27 @@ setCareerGps(gpsResponse);
 setMinimumPath(minimumPathResponse);
 setPrimaryCareerGoal(primaryGoal);
       } catch (err) {
+  if (cancelled) return;
+  if (err instanceof ApiError && err.status === 401) { router.replace("/login"); return; }
   const message =
     err instanceof Error
       ? err.message
       : "Unable to load your career intelligence dashboard.";
 
-  if (
-    message
-      .toLowerCase()
-      .includes("career twin has not been created yet")
-  ) {
+  if (err instanceof ApiError && err.status === 404) {
     setCareerTwinMissing(true);
+    setSetupMessage("A mapped occupation or recorded Career Twin snapshot is not available yet. Complete your profile and evidence setup; no intelligence score has been invented.");
     setError(null);
   } else {
-    console.error(
-      "Dashboard loading failed:",
-      err,
-    );
-
     setError(message);
   }
 } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
 
     void loadDashboard();
+    return () => { cancelled = true; };
   }, [router]);
 
   async function handleLogout() {
@@ -377,15 +381,13 @@ setPrimaryCareerGoal(primaryGoal);
           </div>
 
           <h1 className="mt-5 text-3xl font-bold tracking-tight text-slate-950">
-            Build your Career Twin
+              Continue your career setup
           </h1>
 
           <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
-            Your Career Twin has not been created yet. Complete
-            your initial career interest assessment so CareerPilot
-            can create your first evidence-aware snapshot and begin
-            generating personalized career intelligence.
+            {setupMessage}
           </p>
+          <Link href="/profile" className="mt-4 inline-block text-sm font-semibold text-indigo-700 underline">Review profile and primary career goal</Link>
 
           <div className="mt-8 rounded-2xl bg-slate-50 p-6">
             <p className="text-sm font-semibold text-slate-950">
@@ -417,14 +419,15 @@ setPrimaryCareerGoal(primaryGoal);
             placement, or career success.
           </p>
         </section>
+        <ModuleSummary />
       </div>
     </main>
   );
 }
   if (error) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
-        <div className="w-full max-w-lg rounded-2xl border border-red-200 bg-white p-8 shadow-sm">
+      <main className="min-h-screen bg-slate-50 px-6 py-10">
+        <div className="mx-auto w-full max-w-6xl rounded-2xl border border-red-200 bg-white p-8 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-wider text-red-600">
             Dashboard error
           </p>
@@ -446,6 +449,7 @@ setPrimaryCareerGoal(primaryGoal);
           >
             Try Again
           </button>
+          <ModuleSummary />
         </div>
       </main>
     );
@@ -460,7 +464,7 @@ setPrimaryCareerGoal(primaryGoal);
   !careerGps ||
   !minimumPath
 ) {
-  return null;
+  return <main className="min-h-screen bg-slate-50 p-6"><div className="mx-auto max-w-6xl"><h1 className="text-2xl font-bold">Career intelligence is not available yet</h1><ModuleSummary /></div></main>;
 }
 
   const readinessData = readiness.readiness;
@@ -519,55 +523,6 @@ setPrimaryCareerGoal(primaryGoal);
           </button>
 
           <div className="flex items-center gap-2">
-  <nav className="hidden items-center gap-1 lg:flex">
-  <button
-    type="button"
-    onClick={() => router.push("/dashboard")}
-    className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-  >
-    Dashboard
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/profile")}
-    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-  >
-    Profile
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/resume")}
-    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-  >
-    Resume
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/skills")}
-    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-  >
-    Skills & Evidence
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/assessment")}
-    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-  >
-    Assessments
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/roadmap")}
-    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-  >
-    Roadmap
-  </button>
-</nav>
   <div className="hidden text-right xl:block">
               <p className="text-sm font-medium text-slate-800">
                 {user.email}
@@ -592,21 +547,11 @@ setPrimaryCareerGoal(primaryGoal);
       </header>
 
       <div className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8 lg:py-10">
-        <div className="mb-5 flex flex-wrap justify-end gap-3">
-          <Link href="/progress" className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Career Twin Progress</Link>
-          <Link href="/applications" className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Applications</Link>
-          <Link href="/job-match" className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
-            Job Description Extraction
-          </Link>
-          <Link href="/certifications" className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
-            Recommended Certifications
-          </Link>
-        </div>
         <section className="overflow-hidden rounded-3xl bg-slate-950 p-7 text-white shadow-sm sm:p-9">
           <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-300">
-                Career Intelligence Dashboard
+                Target Role · Career Intelligence Dashboard
               </p>
 
               <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
@@ -1172,6 +1117,8 @@ setPrimaryCareerGoal(primaryGoal);
             </div>
           </div>
         </section>
+
+        <ModuleSummary />
 
         <WhatIfSimulator
           careerId={resolvedCareerId}

@@ -15,6 +15,8 @@ from backend.app.roadmap.router import router as roadmap_router
 from backend.app.certification_recommendations.router import router as certification_recommendations_router
 from backend.app.jobs.router import router as jobs_router
 from backend.app.applications.router import router as applications_router
+from backend.app.assistant.router import router as assistant_router
+from backend.app.dashboard.router import router as dashboard_router
 
 app = FastAPI(
     title="CareerPilot AI API",
@@ -50,6 +52,8 @@ app.include_router(roadmap_router)
 app.include_router(certification_recommendations_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)
+app.include_router(assistant_router)
+app.include_router(dashboard_router)
 
 
 @app.get(

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { hasAssessmentEvidence } from "@/lib/evidence-display";
 
 import {
   getMySkills,
@@ -121,11 +122,12 @@ function SkillCard({ skill }: { skill: StudentSkill }) {
 
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Estimated proficiency
+            Assessment-derived estimate
           </p>
           <p className="mt-1 text-sm font-semibold text-slate-900">
-            {formatPercent(skill.estimated_proficiency)}
+            {formatPercent(hasAssessmentEvidence(skill.evidence) ? skill.estimated_proficiency : null)}
           </p>
+          <p className="mt-1 text-xs text-slate-500">Assessment-specific, not universal proficiency.</p>
         </div>
 
         <div>

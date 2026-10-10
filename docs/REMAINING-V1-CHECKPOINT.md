@@ -1,11 +1,11 @@
 # Remaining CareerPilot V1 checkpoint
 
-## Last verified phase: E — Career Twin Progress Tracking
+## Last verified phase: G — Dashboard & Navigation Integration
 
 Phase A remains complete and preserved. Phase B backend persistence, ownership,
 extraction, API/frontend contract, deployed migration, and checks are verified.
-Phases C, D and E now verified below. STOP after E; Phase F has not started.
-V1 is NOT complete.
+Phases F and G verified below. Stop here: no deployment or research evaluation.
+This is an engineering checkpoint, NOT a production-readiness or research-validation claim.
 No commits, pushes, resets, cleans, dependency changes, or frontend rewrites were
 performed during this completion pass. Existing Phase A/B working-tree changes
 were preserved. The Phase B migration was already applied when this pass began.
@@ -490,3 +490,211 @@ Using repository `.venv/Scripts/python.exe`:
 
 **Next exact phase: F — CareerPilot AI Assistant / RAG.** Not started. Stop here
 for review; final navigation Phase G and V1 completion remain outstanding.
+
+## Proposed Phase F architecture (recorded before implementation)
+
+Entry verification: Git working tree clean; Alembic current/head both
+`b8d4e0f3c7a2`, one head. Preserve the existing CareerPilot AI and ACIF — Adaptive
+Career Intelligence Framework modules and naming.
+
+- Stateless, authenticated assistant with optional owned JD/application UUIDs.
+  No conversation tables or migration; visible messages live only in the page.
+- Structured grounding first. Docker provides pgvector/PostgreSQL 17 and Redis,
+  but no embedding model/vector columns/semantic corpus or application retrieval
+  pipeline was found. No embeddings, vectorization, Redis context cache, or claim
+  of semantic RAG. Structured records remain in their existing owner-scoped stores.
+- Topic selection retrieves bounded relevant summaries using existing profile,
+  goal/O*NET/RIASEC, ACIF, assessment, recommendation, JD match, applications,
+  progress and persisted-roadmap queries. Never call the mutating roadmap getter,
+  create a snapshot, run What-If as real evidence, or load all private records.
+- Provider-neutral interface plus optional OpenAI-compatible HTTPS adapter using
+  stdlib HTTP; settings-only credentials/model/endpoint. No added dependencies.
+  Missing/invalid provider configuration yields ASSISTANT_NOT_CONFIGURED without
+  breaking core startup. Deterministic fake provider exists for tests only.
+- Strong initial claim boundary: provider selects relevant source IDs from
+  server-authored fact/model/recommendation statements, not unrestricted prose.
+  The server validates selection and renders only exact grounded statements.
+  This constrained explanation mode cannot introduce new LLM factual claims;
+  it is intentionally less expressive than free-form generation. LLM selection
+  provenance stays separate from FACT/MODEL_OUTPUT/PERSONALIZED_RECOMMENDATION.
+- Instructions are a fixed system message; question and retrieved summaries
+  are JSON in a separate untrusted-data message. No tools/actions delegated to
+  the provider. Raw resumes, JD bodies, application notes and profile contact
+  details are omitted. External processing requires explicit request consent.
+- Auth/foreign-resource/claim-control/provider-failure/injection tests use fake
+  providers and synthetic PostgreSQL fixtures; no external or paid API calls.
+- Phase F must pass backend, database/security and frontend checks before G.
+  Phase G will add coherent navigation and compact current-state dashboard
+  summaries, preserving existing intelligence and semantic distinctions.
+
+## Phase F — verified checkpoint
+
+Implemented the proposed stateless structured-grounding assistant. This is not
+semantic RAG and does not claim research validation or unrestricted generation.
+
+- Authenticated GET `/api/v1/assistant/status`, POST `/api/v1/assistant/chat`.
+- Request: bounded message, explicit/automatic topic, optional owned JD/application
+  IDs, explicit provider-processing consent. Extra fields (including user_id)
+  rejected. All references ownership-checked even when unconfigured.
+- Topic-based bounded retrieval uses existing services; maximum 12 statements /
+  7,000 statement characters, with per-topic smaller record limits. Profile
+  contact details, raw resumes/JDs, application notes, and previous conversation
+  messages are not sent. No embeddings, Redis cache, or conversation persistence.
+- FACT / MODEL_OUTPUT / PERSONALIZED_RECOMMENDATION source categories remain
+  explicit. Provider selection is labeled LLM_EXPLANATION_SELECTION. Provider
+  may return only up to eight unique known source IDs; unknown IDs, extra prose,
+  duplicate IDs and malformed outputs are rejected. Answers render the exact
+  selected server-authored statements. This prevents new generated factual claims
+  but does not prove selection relevance; evaluation remains future work.
+- Fixed system instructions and separately JSON-encoded untrusted question/context.
+  No provider tools, actions, business-logic decisions or private data writes.
+- Provider-neutral interface, optional stdlib OpenAI-compatible HTTPS adapter,
+  no redirects/proxies, bounded timeout/response size, generic safe failures.
+  Deterministic fake is injectable for tests only, never runtime-configurable.
+- Optional environment configuration documented in `docs/ASSISTANT-CONFIGURATION.md`.
+  No credentials/config files read or changed. No added dependencies.
+- No provider => ASSISTANT_NOT_CONFIGURED, no context/provider call; core startup
+  and services unaffected. Consent absent => CONSENT_REQUIRED. Missing context
+  => INSUFFICIENT_CONTEXT. Provider/validation failure => PROVIDER_UNAVAILABLE,
+  with no provider payload or private context exposed in errors.
+- `/assistant`: starter prompts, question/topic selection, optional owned IDs,
+  consent checkbox, loading/error/auth/not-configured/empty states, source links,
+  limitations, and page-local message display capped at ten responses. Stateless
+  question semantics are explicit. Request cleanup; no automatic paid retries.
+
+Verification before Phase G: assistant tests **6 passed**; full configured-before-
+discovery PostgreSQL-enabled suite **70 passed, zero skips**, including all eight
+PostgreSQL cases. Tests cover foreign JD/application IDs (including no-provider),
+current-user private goals/applications/evidence, omitted resume/notes payloads,
+prompt-injection-like data, exact fact rendering, fake-provider determinism,
+bounded context, malformed/extra provider claims, safe provider failures,
+authentication, no consent/no context, and SELECT-only assistant retrieval.
+External provider transport was mocked; no paid/external LLM calls were made.
+
+Backend compilation, OpenAPI security assertions, Alembic current/heads and
+`git diff --check` passed. Frontend tsc/lint/build passed with `/assistant`.
+No migration: current/head still `b8d4e0f3c7a2`, one head. Existing outside-repo
+lockfile/Windows line-ending warnings remain; no browser E2E claim.
+
+Files: `backend/app/assistant/`, optional settings in `backend/app/core/config.py`,
+main router registration, `backend/tests/test_assistant.py`,
+`frontend/src/lib/api/assistant.ts`, `frontend/src/app/assistant/page.tsx`,
+`docs/ASSISTANT-CONFIGURATION.md`, and this checkpoint.
+
+Next: Phase G — dashboard/navigation integration only. No deployment or research
+evaluation in this batch.
+
+## Phase G — verified checkpoint
+
+- Shared `AppNavigation` and one canonical destination registry connect all eleven
+  major modules. Desktop wrapping links and a native expandable mobile menu use
+  the same registry. Nested assessment routes stay under Assessments; existing
+  `/evidence` remains accessible and maps to Skills & Evidence in navigation.
+  No duplicate pages/routes created. Public login/register pages omit app nav.
+- Root metadata now names CareerPilot AI and ACIF — Adaptive Career Intelligence
+  Framework rather than starter-template text.
+- Dashboard's existing target role / O*NET anchor, ACIF dimensions, gaps, Minimum
+  Action Path, Career GPS and What-If sections remain authoritative and intact.
+  Duplicate dashboard-only navigation was replaced by the shared navigation.
+- Authenticated GET `/api/v1/dashboard/summary` composes read-only existing
+  service results with owner-scoped aggregate queries. It returns compact current
+  roadmap statuses, up to two certification recommendations, latest JD/current
+  recorded-Twin alignment, real application status counts, recorded progress,
+  resume/assessment onboarding signals and assistant configuration status.
+- No new intelligence formulas, evidence writes, roadmap generation, provider
+  calls, models or migrations. Dashboard does not test provider connectivity.
+- `ModuleSummary` presents six concise cards with links to deeper module pages.
+  Missing goals, mappings or Twin snapshots now show setup guidance and usable
+  module summaries instead of an unusable error/blank dashboard. Unknown
+  alignment/recommendations remain unavailable, not misleading zero scores.
+- Empty states link to resume upload, assessment, JD analysis, application
+  tracking, progress and unconfigured assistant. Network errors retain navigation
+  and an independent summary retry. Dashboard async state is guarded on unmount.
+- Saved JD offers a contextual assistant link with the owned JD ID; ownership
+  is still checked server-side. No automatic provider submission occurs.
+
+### Terminology audit
+
+- Existing runtime dashboard uses authenticated target role and O*NET anchor;
+  no Machine Learning Engineer/Data Scientists/15-2051.00 constant was found in
+  the audited runtime dashboard/navigation. Existing onboarding example
+  placeholders were intentionally retained as examples, not runtime data.
+- Removed verification-timestamp inference from the Skills assessment badge.
+  An actual ASSESSMENT evidence source with a measurement is required, including
+  a valid measured zero. Resume strength alone does not imply assessment.
+- Skills/Evidence cards now label the value as an assessment-derived estimate
+  with an explicit assessment-specific, not universal-proficiency qualifier.
+- Kept target role vs anchor, interests vs readiness, evidence vs proficiency,
+  missing evidence vs missing skill, recommendation vs earned certification,
+  and What-If vs prediction distinctions. JD alignment remains evidence alignment,
+  never employment probability. No broad rewrite of correct existing UI.
+
+## Final F–G verification receipt
+
+All Python checks used `D:\CareerPilot-AI\.venv\Scripts\python.exe`.
+
+- Backend compilation: `-m compileall -q backend` passed.
+- Standard discovery: `-m unittest discover -s backend/tests`: **71 discovered,
+  62 passed, 9 PostgreSQL opt-in cases skipped** as intended.
+- Full PostgreSQL-enabled preloaded discovery (command recorded in Phase B):
+  **71 passed, zero skips**, including all nine PostgreSQL cases.
+- Assistant's six tests cover auth, no-provider/consent/context states, validated
+  fake-provider generation, bounded current-user retrieval, foreign JD/app refs,
+  real stored facts, privacy exclusions, injection-like strings, SELECT-only
+  retrieval, malformed provider claims and sanitized failures. No paid APIs.
+- Dashboard PostgreSQL test covers new-student empty states, other-user query
+  manipulation, real status counts, latest owned JD, nullable alignment, private
+  resume isolation, no-provider mode, no provider generation, and SELECT-only SQL.
+- OpenAPI generated and JSON-serialized. Bearer security asserted on all **20**
+  operations across assistant, dashboard, jobs, applications, Career Twin,
+  resumes and skills. Existing assessment ownership tests also passed.
+- Alembic current/heads: **b8d4e0f3c7a2 (head)**, one head, unchanged throughout
+  this batch. No schema revision was added or applied to development data.
+  Existing migration tests ran only within rolled-back synthetic schemas.
+- `git diff --check`: passed. Existing LF/CRLF warnings remain.
+- `node --test tests/navigation.test.mjs` from frontend: **4 passed**. Tests check
+  all eleven unique existing routes, active nested/legacy navigation, assessment
+  evidence semantics including zero, and absence of hard-coded test careers.
+- Frontend `npx tsc --noEmit`, `npm run lint`, `npm run build`: all passed.
+  Production build includes `/assistant` and all existing module routes.
+- No existing browser/E2E framework was found, and none was installed. No
+  authenticated browser acceptance claim. Tests are real ASGI/PostgreSQL,
+  lightweight navigation/semantic tests, types/lint and production build.
+- Existing outside-repository `D:/pnpm-lock.yaml` build warning remains.
+
+### Files changed in this batch
+
+- `backend/app/assistant/`: context, provider, schemas, service, router, package.
+- `backend/app/dashboard/`: read-only summary schemas/service/router/package.
+- `backend/app/core/config.py`, `backend/app/main.py`.
+- `backend/tests/test_assistant.py`, `backend/tests/test_dashboard_summary.py`.
+- `frontend/src/app/assistant/page.tsx`.
+- `frontend/src/app/dashboard/ModuleSummary.tsx`, dashboard `page.tsx`.
+- `frontend/src/components/AppNavigation.tsx`, `frontend/src/lib/navigation.ts`.
+- `frontend/src/lib/api/assistant.ts`, `frontend/src/lib/api/dashboard.ts`.
+- `frontend/src/lib/evidence-display.ts`, skills/evidence pages.
+- `frontend/src/app/layout.tsx`, job-match page (contextual assistant entry).
+- `frontend/tests/navigation.test.mjs`.
+- `docs/ASSISTANT-CONFIGURATION.md`, `docs/REMAINING-V1-CHECKPOINT.md`.
+
+### Remaining limits / handoff
+
+- Assistant is intentionally constrained source selection, not unrestricted
+  LLM-written advice. Factual membership is enforced; relevance/answer quality
+  is not research-validated. Unsupported questions may remain unanswered.
+- Structured grounding only. No semantic RAG, embedding corpus, vector search,
+  conversation persistence, provider tool use, or automatic private-data writes.
+- No live external-provider acceptance test; adapter transport is mocked.
+  Operator must review data-handling terms, configure an approved HTTPS endpoint,
+  model and secret privately, and test it before enabling student use.
+- Rate limiting, quotas, operational monitoring, provider retention policies,
+  broader privacy/accessibility review and browser-level end-to-end testing are
+  still hardening work. Existing ACIF/assessment/Twin limitations remain.
+- Entry Git state was clean; final tree contains only unstaged modifications
+  and untracked F/G files. No commits, pushes, resets, cleans, staging, dependency
+  installs, secret-file edits or applied-migration edits were performed.
+
+**Next engineering phase: Security & Privacy Hardening + Full-System Testing.**
+Stop after G. Do not claim production readiness, research validation, assistant
+accuracy metrics or semantic RAG. Deployment/evaluation/report writing were not
+started in this batch.
