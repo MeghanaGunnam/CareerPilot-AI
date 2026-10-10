@@ -52,6 +52,8 @@ from backend.app.career_twin.models import (
     CareerTwinSnapshot,
 )  # noqa: F401
 from backend.app.roadmap.models import RoadmapItem  # noqa: F401
+from backend.app.jobs.models import JDAnalysis, Requirement  # noqa: F401
+from backend.app.applications.models import Application  # noqa: F401
 config = context.config
 
 # Use the database URL from backend/.env.

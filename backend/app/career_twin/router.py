@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.auth.dependencies import get_current_user
@@ -15,12 +15,19 @@ from backend.app.career_twin.service import (
     get_snapshot_history,
 )
 from backend.app.core.database import get_db
+from backend.app.career_twin.progress import get_progress
+from backend.app.career_twin.progress_schemas import ProgressResponse
 
 
 router = APIRouter(
     prefix="/api/v1/career-twin",
     tags=["Career Twin"],
 )
+
+
+@router.get("/progress", response_model=ProgressResponse)
+def progress(limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0, le=1000000), event_offset: int = Query(0, ge=0, le=1000000), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return get_progress(db, current_user.id, limit, offset, event_offset)
 
 
 @router.post(
