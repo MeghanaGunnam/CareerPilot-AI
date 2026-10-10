@@ -1,3 +1,5 @@
+import { apiRequest } from "@/lib/api/client";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 if (!API_BASE_URL) {
@@ -13,8 +15,20 @@ export interface ResumeVersion {
   file_size_bytes: number;
   file_sha256: string;
   extraction_status: string;
-  parser_version: string;
+  parser_version: string | null;
   created_at: string;
+}
+
+export interface ResumeListItem {
+  id: string;
+  title: string;
+  active_version_number: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResumeDetail extends ResumeListItem {
+  versions: ResumeVersion[];
 }
 
 export interface ResumeUploadResponse {
@@ -76,4 +90,21 @@ export async function uploadResume(
   }
 
   return data as ResumeUploadResponse;
+}
+
+export function listResumes(
+  accessToken: string,
+): Promise<ResumeListItem[]> {
+  return apiRequest<ResumeListItem[]>("/resumes", {
+    accessToken,
+  });
+}
+
+export function getResume(
+  accessToken: string,
+  resumeId: string,
+): Promise<ResumeDetail> {
+  return apiRequest<ResumeDetail>(`/resumes/${resumeId}`, {
+    accessToken,
+  });
 }

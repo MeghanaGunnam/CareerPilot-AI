@@ -3,7 +3,7 @@ import { apiRequest } from "@/lib/api/client";
 export interface SkillEvidence {
   id: string;
   source_type: string;
-  source_reference: string;
+  source_reference: string | null;
   source_section: string | null;
   evidence_text: string | null;
   evidence_status: string;
@@ -19,8 +19,10 @@ export interface StudentSkill {
 
   claimed_proficiency: number | null;
   estimated_proficiency: number | null;
+
   evidence_confidence: number | null;
   freshness_score: number | null;
+
   last_verified_at: string | null;
 
   evidence: SkillEvidence[];

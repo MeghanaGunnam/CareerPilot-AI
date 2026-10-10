@@ -12,101 +12,88 @@ import {
 
 const ACCESS_TOKEN_KEY = "careerpilot_access_token";
 
-function formatSource(source: string) {
-  switch (source.toUpperCase()) {
-    case "RESUME":
-      return "Resume";
-    case "ASSESSMENT":
-      return "Assessment";
-    case "PROJECT":
-      return "Project";
-    case "CERTIFICATION":
-      return "Certification";
-    default:
-      return source
-        .toLowerCase()
-        .replaceAll("_", " ")
-        .replace(/\b\w/g, (character) => character.toUpperCase());
-  }
-}
+function formatLabel(value: string | null | undefined) {
+  if (!value) return "Unknown";
 
-function formatStatus(status: string) {
-  return status
-    .toLowerCase()
+  return value
     .replaceAll("_", " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatDate(value: string) {
+function formatDate(value: string | null) {
+  if (!value) return "Not verified";
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "Unknown date";
+    return "Not verified";
   }
 
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "numeric",
-    month: "short",
+  return date.toLocaleDateString(undefined, {
     year: "numeric",
-  }).format(date);
+    month: "short",
+    day: "numeric",
+  });
 }
 
-function getSourceClasses(source: string) {
-  switch (source.toUpperCase()) {
-    case "ASSESSMENT":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "RESUME":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "PROJECT":
-      return "bg-violet-50 text-violet-700 border-violet-200";
-    case "CERTIFICATION":
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    default:
-      return "bg-slate-50 text-slate-700 border-slate-200";
-  }
+function formatScore(value: number | null) {
+  if (value === null) return "Not calculated";
+
+  return `${Math.round(value * 100)}%`;
+}
+
+function EvidenceBadge({ status }: { status: string }) {
+  const normalized = status.toUpperCase();
+
+  const style =
+    normalized === "VERIFIED"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : normalized === "ASSESSED"
+        ? "bg-blue-50 text-blue-700 border-blue-200"
+        : normalized === "CLAIMED"
+          ? "bg-amber-50 text-amber-700 border-amber-200"
+          : "bg-slate-50 text-slate-700 border-slate-200";
+
+  return (
+    <span
+      className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${style}`}
+    >
+      {formatLabel(status)}
+    </span>
+  );
 }
 
 function EvidenceItem({ evidence }: { evidence: SkillEvidence }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getSourceClasses(
-            evidence.source_type
-          )}`}
-        >
-          {formatSource(evidence.source_type)}
-        </span>
+        <EvidenceBadge status={evidence.evidence_status} />
 
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-          {formatStatus(evidence.evidence_status)}
+        <span className="text-xs font-medium text-slate-500">
+          {formatLabel(evidence.source_type)}
         </span>
 
         {evidence.source_section && (
-          <span className="text-xs text-slate-500">
-            {evidence.source_section}
-          </span>
+          <>
+            <span className="text-xs text-slate-300">•</span>
+            <span className="text-xs text-slate-500">
+              {formatLabel(evidence.source_section)}
+            </span>
+          </>
         )}
       </div>
 
       {evidence.evidence_text && (
-        <p className="mt-3 text-sm font-medium text-slate-800">
-          {evidence.evidence_text}
+        <p className="mt-3 text-sm text-slate-700">
+          Evidence:{" "}
+          <span className="font-medium">
+            {evidence.evidence_text}
+          </span>
         </p>
       )}
 
-      {evidence.evidence_strength !== null && (
-        <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2">
-          <p className="text-xs text-slate-500">
-            Assessment evidence strength
-          </p>
-          <p className="mt-1 text-sm font-semibold text-slate-800">
-            {(evidence.evidence_strength * 100).toFixed(0)}%
-          </p>
-        </div>
-      )}
-
-      <p className="mt-3 text-xs text-slate-400">
+      <p className="mt-2 text-xs text-slate-400">
         Observed {formatDate(evidence.observed_at)}
       </p>
     </div>
@@ -116,78 +103,93 @@ function EvidenceItem({ evidence }: { evidence: SkillEvidence }) {
 function SkillCard({ skill }: { skill: StudentSkill }) {
   const [expanded, setExpanded] = useState(false);
 
-  const sourceCount = new Set(
-    skill.evidence.map((item) => item.source_type)
-  ).size;
+  const hasAssessment =
+    skill.estimated_proficiency !== null ||
+    skill.last_verified_at !== null;
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <button
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-        className="w-full p-5 text-left transition hover:bg-slate-50"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-bold text-slate-900">
               {skill.canonical_name}
             </h2>
 
-            <p className="mt-1 text-sm text-slate-500">
-              {skill.evidence.length} evidence{" "}
-              {skill.evidence.length === 1 ? "record" : "records"} from{" "}
-              {sourceCount} {sourceCount === 1 ? "source" : "sources"}
-            </p>
+            {skill.category && (
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                {skill.category}
+              </span>
+            )}
           </div>
 
-          <span className="text-xl text-slate-400">
-            {expanded ? "−" : "+"}
-          </span>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {Array.from(
-            new Set(skill.evidence.map((item) => item.source_type))
-          ).map((source) => (
-            <span
-              key={source}
-              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getSourceClasses(
-                source
-              )}`}
-            >
-              {formatSource(source)}
-            </span>
-          ))}
-        </div>
-
-        {skill.estimated_proficiency !== null && (
-          <p className="mt-4 text-xs text-slate-500">
-            Measured proficiency is available for this skill.
+          <p className="mt-1 text-sm text-slate-500">
+            {skill.evidence.length} evidence{" "}
+            {skill.evidence.length === 1 ? "record" : "records"}
           </p>
-        )}
+        </div>
+
+        <span
+          className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+            hasAssessment
+              ? "bg-emerald-50 text-emerald-700"
+              : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          {hasAssessment
+            ? "Measured evidence available"
+            : "Evidence available · proficiency not assessed"}
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            Estimated proficiency
+          </p>
+          <p className="mt-1 font-semibold text-slate-800">
+            {skill.estimated_proficiency === null
+              ? "Not assessed"
+              : formatScore(skill.estimated_proficiency)}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            Evidence confidence
+          </p>
+          <p className="mt-1 font-semibold text-slate-800">
+            {formatScore(skill.evidence_confidence)}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            Last verified
+          </p>
+          <p className="mt-1 font-semibold text-slate-800">
+            {formatDate(skill.last_verified_at)}
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        className="mt-5 text-sm font-semibold text-slate-700 transition hover:text-slate-950"
+      >
+        {expanded ? "Hide evidence" : "View evidence"}
+        <span className="ml-1">{expanded ? "↑" : "↓"}</span>
       </button>
 
       {expanded && (
-        <div className="border-t border-slate-200 bg-slate-50 p-5">
-          <div className="mb-4">
-            <h3 className="font-semibold text-slate-900">
-              Evidence provenance
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-500">
-              These records show why CareerPilot knows about this skill.
-              Evidence does not automatically prove proficiency.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {skill.evidence.map((evidence) => (
-              <EvidenceItem
-                key={evidence.id}
-                evidence={evidence}
-              />
-            ))}
-          </div>
+        <div className="mt-4 space-y-3">
+          {skill.evidence.map((evidence) => (
+            <EvidenceItem
+              key={evidence.id}
+              evidence={evidence}
+            />
+          ))}
         </div>
       )}
     </article>
@@ -212,16 +214,13 @@ export default function SkillsPage() {
       }
 
       try {
-        setLoading(true);
-        setError("");
-
         const response = await getMySkills(accessToken);
         setData(response);
-      } catch (loadError) {
+      } catch (err) {
+        console.error("Failed to load skills:", err);
+
         setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Skills and evidence could not be loaded."
+          "We could not load your skill evidence. Your session may have expired."
         );
       } finally {
         setLoading(false);
@@ -232,9 +231,7 @@ export default function SkillsPage() {
   }, [router]);
 
   const filteredSkills = useMemo(() => {
-    if (!data) {
-      return [];
-    }
+    if (!data) return [];
 
     const query = search.trim().toLowerCase();
 
@@ -249,15 +246,11 @@ export default function SkillsPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-50 px-6 py-16">
-        <div className="mx-auto max-w-6xl">
-          <p className="text-sm font-semibold text-blue-600">
-            CareerPilot AI
+      <main className="min-h-screen bg-slate-50">
+        <div className="mx-auto max-w-6xl px-6 py-16">
+          <p className="text-sm font-medium text-slate-500">
+            Loading your skill evidence...
           </p>
-
-          <h1 className="mt-2 text-3xl font-bold text-slate-900">
-            Loading skills and evidence...
-          </h1>
         </div>
       </main>
     );
@@ -265,27 +258,25 @@ export default function SkillsPage() {
 
   if (error) {
     return (
-      <main className="min-h-screen bg-slate-50 px-6 py-16">
-        <div className="mx-auto max-w-3xl rounded-2xl border border-red-200 bg-white p-8">
-          <p className="text-sm font-semibold uppercase tracking-wide text-red-600">
-            Skills error
-          </p>
+      <main className="min-h-screen bg-slate-50">
+        <div className="mx-auto max-w-3xl px-6 py-16">
+          <div className="rounded-2xl border border-red-200 bg-white p-6">
+            <h1 className="text-xl font-bold text-slate-900">
+              Skills & Evidence
+            </h1>
 
-          <h1 className="mt-2 text-2xl font-bold text-slate-900">
-            Skills and evidence could not be loaded
-          </h1>
+            <p className="mt-3 text-sm text-red-600">
+              {error}
+            </p>
 
-          <p className="mt-3 text-sm text-slate-600">
-            {error}
-          </p>
-
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="mt-6 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
-          >
-            Try Again
-          </button>
+            <button
+              type="button"
+              onClick={() => router.push("/login")}
+              className="mt-5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Sign in again
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -297,130 +288,123 @@ export default function SkillsPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+      <div className="mx-auto max-w-6xl px-6 py-10">
+        <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
           <div>
-            <p className="text-lg font-bold text-slate-900">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="mb-4 text-sm font-semibold text-slate-500 hover:text-slate-900"
+            >
+              ← Back to dashboard
+            </button>
+
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">
               CareerPilot AI
             </p>
-            <p className="text-xs text-slate-500">
-              Evidence-Aware Career Intelligence
+
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
+              Skills & Evidence
+            </h1>
+
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              Review the skills CareerPilot has identified and the evidence
+              supporting them. Resume mentions are evidence signals; they do
+              not automatically represent verified proficiency.
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Back to Dashboard
-          </button>
         </div>
-      </header>
-
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <section>
-          <p className="text-sm font-semibold uppercase tracking-wider text-blue-600">
-            Evidence-Aware Career Twin
-          </p>
-
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-            Skills & Evidence
-          </h1>
-
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-            Review the skills CareerPilot has discovered and the evidence
-            supporting each one. Resume mentions are treated as evidence
-            claims, while assessment results are stored separately as
-            measured evidence.
-          </p>
-        </section>
 
         <section className="mt-8 grid gap-4 sm:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Skills discovered
+            <p className="text-sm font-medium text-slate-500">
+              Identified skills
             </p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">
+            <p className="mt-2 text-3xl font-bold text-slate-950">
               {data.total_skills}
             </p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">
+            <p className="text-sm font-medium text-slate-500">
               Evidence records
             </p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">
+            <p className="mt-2 text-3xl font-bold text-slate-950">
               {data.total_evidence}
             </p>
           </div>
         </section>
 
-        <section className="mt-8">
-          <label
-            htmlFor="skill-search"
-            className="text-sm font-semibold text-slate-700"
-          >
-            Search skills
-          </label>
-
-          <input
-            id="skill-search"
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search Python, Java, SQL..."
-            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-          />
-        </section>
-
-        <section className="mt-8">
-          <div className="mb-4 flex items-end justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">
-                Evidence inventory
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                {filteredSkills.length} skills shown
-              </p>
-            </div>
-          </div>
-
-          {filteredSkills.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-              <p className="font-semibold text-slate-800">
-                No matching skill found
-              </p>
-
-              <p className="mt-2 text-sm text-slate-500">
-                Try another search term.
-              </p>
-            </div>
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {filteredSkills.map((skill) => (
-                <SkillCard
-                  key={skill.id}
-                  skill={skill}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="mt-10 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+        <section className="mt-8 rounded-2xl border border-blue-100 bg-blue-50 p-5">
           <h2 className="font-semibold text-slate-900">
-            How to interpret this page
+            How CareerPilot interprets evidence
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            A skill appearing here means CareerPilot has evidence associated
-            with it. Resume mentions, project detections, certifications and
-            assessments have different evidential meaning. A detected or
-            claimed skill should not be interpreted as verified proficiency.
+            A skill appearing in a resume can establish that supporting
+            evidence exists. CareerPilot keeps this separate from measured
+            proficiency, evidence confidence, and verified competency so that
+            unsupported scores are not invented.
           </p>
         </section>
+
+        {data.skills.length === 0 ? (
+          <section className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+            <h2 className="text-lg font-bold text-slate-900">
+              No skill evidence yet
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-500">
+              Uploading a resume or completing supported assessments can add
+              evidence to your Career Twin.
+            </p>
+          </section>
+        ) : (
+          <>
+            <section className="mt-8">
+              <label
+                htmlFor="skill-search"
+                className="text-sm font-semibold text-slate-700"
+              >
+                Search skills
+              </label>
+
+              <input
+                id="skill-search"
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search Python, Java, SQL..."
+                className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+              />
+            </section>
+
+            <section className="mt-6 space-y-4">
+              {filteredSkills.length > 0 ? (
+                filteredSkills.map((skill) => (
+                  <SkillCard
+                    key={skill.id}
+                    skill={skill}
+                  />
+                ))
+              ) : (
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+                  <p className="text-sm text-slate-500">
+                    No skills match &quot;{search}&quot;.
+                  </p>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        <footer className="mt-10 border-t border-slate-200 pt-6">
+          <p className="text-xs leading-5 text-slate-500">
+            CareerPilot distinguishes observed evidence from measured
+            proficiency. Evidence shown here should not be interpreted as a
+            hiring, placement, employability, or career-success probability.
+          </p>
+        </footer>
       </div>
     </main>
   );

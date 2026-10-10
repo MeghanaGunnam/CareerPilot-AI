@@ -1,9 +1,19 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  DragEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  getResume,
+  listResumes,
+  ResumeDetail,
+  ResumeListItem,
   ResumeUploadResponse,
   uploadResume,
 } from "@/lib/api/resumes";
@@ -42,6 +52,85 @@ export default function ResumePage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] =
     useState<ResumeUploadResponse | null>(null);
+  const [resumes, setResumes] = useState<ResumeListItem[]>([]);
+  const [selectedResume, setSelectedResume] =
+    useState<ResumeDetail | null>(null);
+  const [selectedResumeId, setSelectedResumeId] = useState("");
+  const [isLoadingResumes, setIsLoadingResumes] = useState(true);
+  const [resumeLoadError, setResumeLoadError] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadResumes() {
+      const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+
+      if (!accessToken) {
+        router.push("/login");
+        return;
+      }
+
+      try {
+        setIsLoadingResumes(true);
+        setResumeLoadError(null);
+
+        const loadedResumes = await listResumes(accessToken);
+
+        if (!cancelled) {
+          setResumes(loadedResumes);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setResumeLoadError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Saved resumes could not be loaded.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingResumes(false);
+        }
+      }
+    }
+
+    loadResumes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  async function selectResume(resumeId: string) {
+    setSelectedResumeId(resumeId);
+    setSelectedResume(null);
+
+    if (!resumeId) {
+      return;
+    }
+
+    const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+
+    if (!accessToken) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      setError(null);
+      const detail = await getResume(accessToken, resumeId);
+      setSelectedResume(detail);
+      setTitle(detail.title);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Resume history could not be loaded.",
+      );
+    }
+  }
 
   function validateFile(selectedFile: File): string | null {
     const isPdf =
@@ -153,9 +242,17 @@ export default function ResumePage() {
         accessToken,
         file,
         trimmedTitle,
+        selectedResumeId || undefined,
       );
 
       setResult(uploadResult);
+      const refreshedResumes = await listResumes(accessToken);
+      setResumes(refreshedResumes);
+      await selectResume(uploadResult.resume_id);
+      setFile(null);
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
     } catch (uploadError) {
       const message =
         uploadError instanceof Error
@@ -206,6 +303,122 @@ export default function ResumePage() {
           </div>
         </div>
 
+        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">
+                Saved resumes
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Select a resume to review its versions or upload a new version.
+              </p>
+            </div>
+
+            {resumes.length > 0 && (
+              <label className="w-full md:max-w-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Resume
+                </span>
+                <select
+                  value={selectedResumeId}
+                  onChange={(event) => selectResume(event.target.value)}
+                  disabled={isLoadingResumes}
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                >
+                  <option value="">Choose a saved resume</option>
+                  {resumes.map((resume) => (
+                    <option key={resume.id} value={resume.id}>
+                      {resume.title} · v{resume.active_version_number ?? "—"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+
+          {isLoadingResumes && (
+            <p className="mt-5 text-sm text-slate-500">
+              Loading saved resumes…
+            </p>
+          )}
+
+          {resumeLoadError && !isLoadingResumes && (
+            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {resumeLoadError}
+            </div>
+          )}
+
+          {!isLoadingResumes && !resumeLoadError && resumes.length === 0 && (
+            <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+              No saved resumes yet. Upload your first PDF below.
+            </div>
+          )}
+
+          {selectedResume && (
+            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold text-slate-900">
+                    {selectedResume.title}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Active version: v{selectedResume.active_version_number ?? "—"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedResumeId(selectedResume.id)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                >
+                  Upload new version below
+                </button>
+              </div>
+
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[620px] text-left text-sm">
+                  <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">Version</th>
+                      <th className="px-3 py-2 font-semibold">Filename</th>
+                      <th className="px-3 py-2 font-semibold">Size</th>
+                      <th className="px-3 py-2 font-semibold">Status</th>
+                      <th className="px-3 py-2 font-semibold">Processed</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {[...selectedResume.versions]
+                      .sort((a, b) => b.version_number - a.version_number)
+                      .map((version) => (
+                        <tr key={version.id}>
+                          <td className="px-3 py-3 font-semibold text-slate-800">
+                            v{version.version_number}
+                            {version.version_number === selectedResume.active_version_number && (
+                              <span className="ml-2 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                                CURRENT
+                              </span>
+                            )}
+                          </td>
+                          <td className="max-w-[220px] truncate px-3 py-3 text-slate-700">
+                            {version.original_filename}
+                          </td>
+                          <td className="px-3 py-3 text-slate-600">
+                            {formatFileSize(version.file_size_bytes)}
+                          </td>
+                          <td className="px-3 py-3 text-slate-600">
+                            {version.extraction_status}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                            {formatDate(version.created_at)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+
         <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div>
@@ -223,7 +436,7 @@ export default function ResumePage() {
                 htmlFor="resume-title"
                 className="text-sm font-semibold text-slate-700"
               >
-                Resume title
+                {selectedResumeId ? "Resume title" : "New resume title"}
               </label>
 
               <input
@@ -321,6 +534,12 @@ export default function ResumePage() {
               Detection alone does not automatically prove skill
               proficiency.
             </p>
+            {selectedResumeId && (
+              <p className="mt-2 text-xs font-medium text-blue-700">
+                This upload will be saved as the next version of the selected
+                resume.
+              </p>
+            )}
           </section>
 
           <aside className="space-y-6">

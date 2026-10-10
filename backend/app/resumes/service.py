@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import HTTPException, UploadFile, status
 from pypdf import PdfReader
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from backend.app.career_twin.service import create_career_twin_snapshot
 from backend.app.resumes.models import Resume, ResumeVersion
 from backend.app.resumes.parser import parse_resume_sections
@@ -374,3 +374,41 @@ async def upload_resume(
             delete_private_file(storage_key)
 
         raise
+
+
+def list_user_resumes(
+    db: Session,
+    user_id: UUID,
+) -> list[Resume]:
+    statement = (
+        select(Resume)
+        .where(Resume.user_id == user_id)
+        .order_by(Resume.updated_at.desc())
+    )
+
+    return list(db.scalars(statement).all())
+
+
+def get_user_resume(
+    db: Session,
+    user_id: UUID,
+    resume_id: UUID,
+) -> Resume:
+    statement = (
+        select(Resume)
+        .options(selectinload(Resume.versions))
+        .where(
+            Resume.id == resume_id,
+            Resume.user_id == user_id,
+        )
+    )
+
+    resume = db.scalar(statement)
+
+    if resume is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found.",
+        )
+
+    return resume

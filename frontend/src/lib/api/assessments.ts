@@ -5,7 +5,7 @@ export interface AssessmentSummary {
   skill_id: string;
   skill_name: string;
   title: string;
-  description: string;
+  description: string | null;
   difficulty: string;
   version: number;
 }
@@ -40,7 +40,7 @@ export interface AssessmentResultAnswer {
   selected_option: string;
   correct_option: string;
   is_correct: boolean;
-  explanation: string;
+  explanation: string | null;
 }
 
 export interface AssessmentSubmissionResponse {
@@ -64,7 +64,7 @@ export interface AssessmentRecommendationCompetency {
   level: number | null;
   mapping_type: string;
   mapping_version: string;
-  rationale: string | null;
+  mapping_rationale: string | null;
 }
 
 export interface AssessmentRecommendation {
@@ -72,7 +72,7 @@ export interface AssessmentRecommendation {
   skill_id: string;
   skill_name: string;
   title: string;
-  description: string;
+  description: string | null;
   difficulty: string;
   version: number;
   competency: AssessmentRecommendationCompetency;
@@ -83,7 +83,7 @@ export interface AssessmentRecommendation {
 export interface CareerAssessmentRecommendationsResponse {
   career_id: string;
   career_title: string;
-  onet_soc_code: string;
+  onet_soc_code: string | null;
   recommended_count: number;
   recommendations: AssessmentRecommendation[];
   interpretation: string;

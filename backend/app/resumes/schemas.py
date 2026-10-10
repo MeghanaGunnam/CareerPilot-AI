@@ -36,6 +36,17 @@ class ResumeListItemResponse(BaseModel):
     updated_at: datetime
 
 
+class ResumeDetailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    title: str
+    active_version_number: int | None
+    created_at: datetime
+    updated_at: datetime
+    versions: list[ResumeVersionResponse]
+
+
 class ResumeTextResponse(BaseModel):
     resume_id: UUID
     version_id: UUID

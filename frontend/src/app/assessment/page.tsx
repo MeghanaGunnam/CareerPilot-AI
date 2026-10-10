@@ -73,33 +73,35 @@ export default function AssessmentPage() {
       setLoading(true);
       setError("");
 
-      const [assessmentResponse, primaryGoal] = await Promise.all([
-        getAssessments(accessToken),
-        getPrimaryCareerGoal(accessToken),
-      ]);
-
-      if (!primaryGoal.onet_soc_code) {
-        throw new Error(
-          "Your primary career goal does not have an O*NET occupation mapping."
-        );
-      }
-
-      const targetCareer = await resolveCareerByOnetCode(
-        primaryGoal.target_role,
-        primaryGoal.onet_soc_code
-      );
-
-      const careerId = targetCareer.id;
-
-      const recommendationResponse =
-        await getCareerAssessmentRecommendations(
-          accessToken,
-          careerId
-        );
-
+      const assessmentResponse = await getAssessments(accessToken);
       setAssessments(assessmentResponse);
-      setResolvedCareerId(careerId);
-      setRecommendations(recommendationResponse);
+
+      try {
+        const primaryGoal = await getPrimaryCareerGoal(accessToken);
+
+        if (!primaryGoal.onet_soc_code) {
+          return;
+        }
+
+        const targetCareer = await resolveCareerByOnetCode(
+          primaryGoal.target_role,
+          primaryGoal.onet_soc_code
+        );
+
+        const careerId = targetCareer.id;
+        const recommendationResponse =
+          await getCareerAssessmentRecommendations(
+            accessToken,
+            careerId
+          );
+
+        setResolvedCareerId(careerId);
+        setRecommendations(recommendationResponse);
+      } catch {
+        // The catalog remains usable when career recommendations are
+        // unavailable or the student has not completed a mapped goal.
+        setRecommendations(null);
+      }
     } catch (loadError) {
       setError(
         loadError instanceof Error

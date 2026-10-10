@@ -558,6 +558,14 @@ setPrimaryCareerGoal(primaryGoal);
   >
     Assessments
   </button>
+
+  <button
+    type="button"
+    onClick={() => router.push("/roadmap")}
+    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+  >
+    Roadmap
+  </button>
 </nav>
   <div className="hidden text-right xl:block">
               <p className="text-sm font-medium text-slate-800">

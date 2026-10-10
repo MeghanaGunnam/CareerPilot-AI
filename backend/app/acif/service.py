@@ -555,13 +555,13 @@ def simulate_career_skill_evidence(
         for row in competency_rows
     ]
 
-    gap_analysis = build_gap_analysis(
+    before_gap = build_gap_analysis(
     db=db,
-    software_alignment=career_match[
+    software_alignment=before_match[
         "software_alignment"
     ],
     competency_rows=competency_data,
-    skill_states=skill_states,
+    skill_states=current_skill_states,
 )
 
     after_gap = build_gap_analysis(

@@ -51,6 +51,7 @@ from backend.app.career_twin.models import (
     CareerTwinEvent,
     CareerTwinSnapshot,
 )  # noqa: F401
+from backend.app.roadmap.models import RoadmapItem  # noqa: F401
 config = context.config
 
 # Use the database URL from backend/.env.
